@@ -48,11 +48,12 @@ export default function AddExpense() {
         const fromLibrary = source === 'library';
         const result = fromLibrary
           ? await ImagePicker.launchImageLibraryAsync({
-              mediaTypes: ImagePicker.MediaTypeOptions.Images,
+              mediaTypes: ['images'],
               quality: 0.85,
               allowsEditing: false,
             })
           : await ImagePicker.launchCameraAsync({
+              mediaTypes: ['images'],
               quality: 0.85,
               allowsEditing: false,
             });
