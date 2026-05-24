@@ -1,0 +1,41 @@
+{
+  "expo": {
+    "name": "Schedule E AI",
+    "slug": "schedule-e-ai",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "scheme": "scheduleeai",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.scheduleeai.app",
+      "infoPlist": {
+        "NSCameraUsageDescription": "We use the camera to capture receipts for expense tracking.",
+        "NSPhotoLibraryUsageDescription": "We access your photo library so you can pick existing receipt photos."
+      }
+    },
+    "android": {
+      "package": "com.scheduleeai.app",
+      "permissions": ["CAMERA", "READ_EXTERNAL_STORAGE"]
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow Schedule E AI to access your camera to capture receipts."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow Schedule E AI to access your photos to pick existing receipts."
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
