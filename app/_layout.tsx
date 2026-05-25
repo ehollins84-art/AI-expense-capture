@@ -15,9 +15,40 @@ export default function RootLayout() {
             screenOptions={{
               headerShown: false,
               contentStyle: { backgroundColor: theme.colors.bg },
-              animation: 'fade',
+              animation: 'default',
             }}
-          />
+          >
+            <Stack.Screen
+              name="add"
+              options={{
+                presentation: 'modal',
+                animation: 'slide_from_bottom',
+                gestureEnabled: true,
+              }}
+            />
+            <Stack.Screen
+              name="settings"
+              options={{
+                presentation: 'modal',
+                animation: 'slide_from_bottom',
+              }}
+            />
+            <Stack.Screen
+              name="projects/new"
+              options={{
+                presentation: 'modal',
+                animation: 'slide_from_bottom',
+              }}
+            />
+            <Stack.Screen
+              name="expense/[id]"
+              options={{ animation: 'slide_from_right' }}
+            />
+            <Stack.Screen
+              name="category/[name]"
+              options={{ animation: 'slide_from_right' }}
+            />
+          </Stack>
         </StoreProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
