@@ -21,9 +21,13 @@ import { formatDate, formatMoney, moneyTextStyle } from '../../lib/format';
 import { imagePathForExpense } from '../../lib/storage';
 import { categoriesForProject } from '../../lib/categories';
 import { haptic } from '../../lib/haptics';
+import { DatePickerModal } from '../../components/DatePickerModal';
+import { ReceiptLightbox } from '../../components/ReceiptLightbox';
+import { queuePendingDelete } from '../../lib/pendingDelete';
+import { signalExpenseDeleted } from '../../lib/uiSignals';
 import type { Expense } from '../../lib/types';
 
-type EditField = 'amount' | 'title' | 'date' | 'category' | null;
+type EditField = 'amount' | 'title' | 'category' | null;
 
 export default function ExpenseDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -33,6 +37,8 @@ export default function ExpenseDetail() {
   const expense = expenses.find((e) => e.id === id);
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [editing, setEditing] = useState<EditField>(null);
+  const [datePickerOpen, setDatePickerOpen] = useState(false);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
   const [draft, setDraft] = useState({
     title: '',
     date: '',
@@ -115,19 +121,6 @@ export default function ExpenseDetail() {
         return;
       }
       next = { ...next, title: t };
-    } else if (field === 'date') {
-      const d = draft.date.trim();
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(d) || isNaN(Date.parse(d))) {
-        setDraft((s) => ({ ...s, date: expense.date }));
-        setEditing(null);
-        haptic.warning();
-        Alert.alert(
-          'That date didn\'t look right',
-          'Enter it as year-month-day, like 2026-05-25.',
-        );
-        return;
-      }
-      next = { ...next, date: d };
     } else if (field === 'category') {
       if (!draft.category) {
         setEditing(null);
@@ -161,14 +154,17 @@ export default function ExpenseDetail() {
   }
 
   function confirmDelete() {
-    Alert.alert('Delete expense?', 'This removes the receipt locally.', [
+    Alert.alert('Delete this receipt?', 'You\'ll have a few seconds to undo.', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Delete',
         style: 'destructive',
-        onPress: async () => {
+        onPress: () => {
           if (!expense) return;
-          await removeExpense(expense);
+          const snapshot = expense;
+          queuePendingDelete(snapshot, () => removeExpense(snapshot));
+          signalExpenseDeleted(snapshot);
+          haptic.warning();
           router.back();
         },
       },
@@ -296,29 +292,35 @@ export default function ExpenseDetail() {
           )}
 
           <View style={styles.metaCard}>
-            <EditableRow
-              label="Date"
-              isEditing={editing === 'date'}
-              onPressLabel={() => {
-                haptic.select();
-                setEditing('date');
-              }}
-              displayValue={formatDate(expense.date)}
-              flash={flashAnims.date}
-              editor={
-                <TextInput
-                  value={draft.date}
-                  onChangeText={(v) => setDraft((d) => ({ ...d, date: v }))}
-                  onBlur={() => commit('date')}
-                  onSubmitEditing={() => commit('date')}
-                  autoFocus
-                  placeholder="2026-05-25"
-                  placeholderTextColor={theme.colors.textSubtle}
-                  style={styles.rowInput}
-                  returnKeyType="done"
-                />
-              }
-            />
+            <View style={styles.row}>
+              <Text style={styles.rowLabel}>Date</Text>
+              <Pressable
+                onPress={() => {
+                  haptic.select();
+                  setDatePickerOpen(true);
+                }}
+                scaleTo={1}
+              >
+                <Animated.View
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    paddingHorizontal: 6,
+                    paddingVertical: 2,
+                    borderRadius: 6,
+                    backgroundColor: flashAnims.date.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: ['transparent', theme.colors.accentSoft],
+                    }),
+                  }}
+                >
+                  <Text style={styles.rowValue}>
+                    {formatDate(expense.date)}
+                  </Text>
+                  <Text style={styles.editGlyphInline}>  ›</Text>
+                </Animated.View>
+              </Pressable>
+            </View>
 
             <View style={styles.rowDivider} />
 
@@ -417,61 +419,58 @@ export default function ExpenseDetail() {
           </View>
 
           {imageUri && (
-            <Image
-              source={{ uri: imageUri }}
-              style={styles.receiptImage}
-              contentFit="cover"
-            />
+            <Pressable
+              onPress={() => {
+                haptic.select();
+                setLightboxOpen(true);
+              }}
+              scaleTo={0.98}
+              style={styles.receiptWrap}
+            >
+              <Image
+                source={{ uri: imageUri }}
+                style={styles.receiptImage}
+                contentFit="cover"
+              />
+              <View style={styles.receiptBadge}>
+                <Text style={styles.receiptBadgeText}>Tap to zoom</Text>
+              </View>
+            </Pressable>
           )}
         </ScrollView>
       </KeyboardAvoidingView>
-    </Screen>
-  );
-}
 
-function EditableRow({
-  label,
-  isEditing,
-  onPressLabel,
-  displayValue,
-  editor,
-  flash,
-}: {
-  label: string;
-  isEditing: boolean;
-  onPressLabel: () => void;
-  displayValue: string;
-  editor: React.ReactNode;
-  flash?: Animated.Value;
-}) {
-  return (
-    <View style={styles.row}>
-      <Text style={styles.rowLabel}>{label}</Text>
-      {isEditing ? (
-        <View style={{ flex: 1, alignItems: 'flex-end' }}>{editor}</View>
-      ) : (
-        <Pressable onPress={onPressLabel} scaleTo={1}>
-          <Animated.View
-            style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              paddingHorizontal: 6,
-              paddingVertical: 2,
-              borderRadius: 6,
-              backgroundColor: flash
-                ? flash.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: ['transparent', theme.colors.accentSoft],
-                  })
-                : 'transparent',
-            }}
-          >
-            <Text style={styles.rowValue}>{displayValue}</Text>
-            <Text style={styles.editGlyphInline}>  ✎</Text>
-          </Animated.View>
-        </Pressable>
-      )}
-    </View>
+      <DatePickerModal
+        visible={datePickerOpen}
+        initialDate={expense.date}
+        onSubmit={(iso) => {
+          setDatePickerOpen(false);
+          if (iso === expense.date) return;
+          const next: Expense = { ...expense, date: iso };
+          updateExpense(next)
+            .then(async (stored) => {
+              const p = await imagePathForExpense(iteration, stored);
+              setImageUri(`${p}?t=${Date.now()}`);
+              haptic.light();
+              flash('date');
+            })
+            .catch((err) => {
+              haptic.error();
+              Alert.alert(
+                'Save failed',
+                err instanceof Error ? err.message : String(err),
+              );
+            });
+        }}
+        onDismiss={() => setDatePickerOpen(false)}
+      />
+
+      <ReceiptLightbox
+        visible={lightboxOpen}
+        uri={imageUri}
+        onClose={() => setLightboxOpen(false)}
+      />
+    </Screen>
   );
 }
 
@@ -597,10 +596,30 @@ const styles = StyleSheet.create({
   },
   catChipText: { ...theme.type.label, color: theme.colors.text },
   catChipTextActive: { color: '#fff' },
+  receiptWrap: {
+    width: '100%',
+    borderRadius: theme.radius.lg,
+    overflow: 'hidden',
+  },
   receiptImage: {
     width: '100%',
     aspectRatio: 3 / 4,
     borderRadius: theme.radius.lg,
     backgroundColor: theme.colors.surfaceAlt,
+  },
+  receiptBadge: {
+    position: 'absolute',
+    bottom: 12,
+    right: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: theme.radius.pill,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+  },
+  receiptBadgeText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
+    letterSpacing: 0.3,
   },
 });

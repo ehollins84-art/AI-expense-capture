@@ -1,5 +1,6 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Animated,
   FlatList,
   RefreshControl,
   StyleSheet,
@@ -11,13 +12,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Screen } from '../components/Screen';
 import { Pressable } from '../components/Pressable';
 import { CameraIcon } from '../components/CameraIcon';
-import { Toast } from '../components/Toast';
 import { useStore, useActiveProject } from '../lib/store';
 import { theme } from '../lib/theme';
 import { formatMoneyCompact, formatMoney, moneyTextStyle } from '../lib/format';
 import { categoriesForProject } from '../lib/categories';
 import { haptic } from '../lib/haptics';
-import { consumeReceiptSaved, subscribeReceiptSaved } from '../lib/uiSignals';
+import { isPending, subscribePending } from '../lib/pendingDelete';
 
 export default function Home() {
   const router = useRouter();
@@ -33,23 +33,16 @@ export default function Home() {
   const active = useActiveProject();
   const [year, setYear] = useState<number>(new Date().getFullYear());
   const [refreshing, setRefreshing] = useState(false);
-  const [savedToast, setSavedToast] = useState(false);
+  const [, setPendingTick] = useState(0);
 
   useFocusEffect(
     React.useCallback(() => {
       refresh();
-      if (consumeReceiptSaved() !== null) {
-        setSavedToast(true);
-      }
     }, [refresh]),
   );
 
   useEffect(() => {
-    return subscribeReceiptSaved(() => {
-      if (consumeReceiptSaved() !== null) {
-        setSavedToast(true);
-      }
-    });
+    return subscribePending(() => setPendingTick((t) => t + 1));
   }, []);
 
   const availableYears = useMemo(() => {
@@ -65,7 +58,8 @@ export default function Home() {
     return expenses.filter(
       (e) =>
         e.projectId === active.id &&
-        new Date(e.date).getFullYear() === year,
+        new Date(e.date).getFullYear() === year &&
+        !isPending(e.id),
     );
   }, [expenses, active, year]);
 
@@ -83,6 +77,11 @@ export default function Home() {
       .filter(([, amt]) => amt > 0)
       .sort((a, b) => b[1] - a[1]);
   }, [projectExpenses, active]);
+
+  const maxCategoryAmount = byCategory.reduce(
+    (m, [, amt]) => Math.max(m, amt),
+    0,
+  );
 
   async function handleRefresh() {
     setRefreshing(true);
@@ -241,7 +240,9 @@ export default function Home() {
             colors={[theme.colors.accent]}
           />
         }
-        ItemSeparatorComponent={() => <View style={{ height: 1, backgroundColor: theme.colors.border }} />}
+        ItemSeparatorComponent={() => (
+          <View style={{ height: 1, backgroundColor: theme.colors.border }} />
+        )}
         ListEmptyComponent={
           <View style={styles.emptyState}>
             <Text style={styles.emptyTitle}>No expenses yet for {year}.</Text>
@@ -251,23 +252,18 @@ export default function Home() {
           </View>
         }
         renderItem={({ item: [category, amount] }) => (
-          <Pressable
-            hapticOnPress="select"
+          <CategoryRow
+            name={category}
+            amount={amount}
+            currency={currency}
+            share={maxCategoryAmount > 0 ? amount / maxCategoryAmount : 0}
             onPress={() =>
               router.push({
                 pathname: '/category/[name]',
                 params: { name: category, year: year.toString() },
               })
             }
-            style={styles.categoryRow}
-          >
-            <Text style={styles.categoryName} numberOfLines={1}>
-              {category}
-            </Text>
-            <Text style={[styles.categoryAmount, moneyTextStyle]}>
-              {formatMoney(amount, currency)}
-            </Text>
-          </Pressable>
+          />
         )}
       />
 
@@ -289,12 +285,58 @@ export default function Home() {
         <CameraIcon size={28} color="#fff" />
       </Pressable>
 
-      <Toast
-        visible={savedToast}
-        message="Receipt saved"
-        onHide={() => setSavedToast(false)}
-      />
     </Screen>
+  );
+}
+
+function CategoryRow({
+  name,
+  amount,
+  currency,
+  share,
+  onPress,
+}: {
+  name: string;
+  amount: number;
+  currency: string;
+  share: number;
+  onPress: () => void;
+}) {
+  const progress = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.spring(progress, {
+      toValue: share,
+      useNativeDriver: false,
+      speed: 8,
+      bounciness: 4,
+    }).start();
+  }, [share]);
+
+  return (
+    <Pressable hapticOnPress="select" onPress={onPress} style={styles.categoryRow}>
+      <View style={styles.categoryTopRow}>
+        <Text style={styles.categoryName} numberOfLines={1}>
+          {name}
+        </Text>
+        <Text style={[styles.categoryAmount, moneyTextStyle]}>
+          {formatMoney(amount, currency)}
+        </Text>
+      </View>
+      <View style={styles.categoryBarTrack}>
+        <Animated.View
+          style={[
+            styles.categoryBarFill,
+            {
+              width: progress.interpolate({
+                inputRange: [0, 1],
+                outputRange: ['0%', '100%'],
+              }),
+            },
+          ]}
+        />
+      </View>
+    </Pressable>
   );
 }
 
@@ -421,14 +463,28 @@ const styles = StyleSheet.create({
   yearChipText: { ...theme.type.label, color: theme.colors.textMuted },
   yearChipTextActive: { color: theme.colors.accent },
   categoryRow: {
+    paddingVertical: 16,
+  },
+  categoryTopRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 18,
     gap: 12,
+    marginBottom: 10,
   },
   categoryName: { ...theme.type.body, color: theme.colors.text, flex: 1 },
   categoryAmount: { ...theme.type.bodyStrong, color: theme.colors.text },
+  categoryBarTrack: {
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: theme.colors.surfaceAlt,
+    overflow: 'hidden',
+  },
+  categoryBarFill: {
+    height: '100%',
+    backgroundColor: theme.colors.accent,
+    borderRadius: 2,
+  },
   emptyState: {
     paddingTop: theme.spacing.xxl,
     alignItems: 'center',

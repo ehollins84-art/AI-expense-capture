@@ -4,6 +4,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { StoreProvider } from '../lib/store';
 import { theme } from '../lib/theme';
+import { GlobalToasts } from '../components/GlobalToasts';
 
 export default function RootLayout() {
   return (
@@ -45,6 +46,7 @@ export default function RootLayout() {
               }}
             />
           </Stack>
+          <GlobalToasts />
         </StoreProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>

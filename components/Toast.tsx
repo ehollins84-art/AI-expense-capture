@@ -1,20 +1,39 @@
 import React, { useEffect, useRef } from 'react';
 import { Animated, StyleSheet, Text, View } from 'react-native';
 import { theme } from '../lib/theme';
+import { Pressable } from './Pressable';
 
 export function Toast({
   visible,
   message,
   onHide,
   duration = 2400,
+  action,
 }: {
   visible: boolean;
   message: string;
   onHide: () => void;
   duration?: number;
+  action?: { label: string; onPress: () => void };
 }) {
   const translate = useRef(new Animated.Value(80)).current;
   const opacity = useRef(new Animated.Value(0)).current;
+  const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function dismiss() {
+    Animated.parallel([
+      Animated.timing(translate, {
+        toValue: 80,
+        duration: 220,
+        useNativeDriver: true,
+      }),
+      Animated.timing(opacity, {
+        toValue: 0,
+        duration: 220,
+        useNativeDriver: true,
+      }),
+    ]).start(() => onHide());
+  }
 
   useEffect(() => {
     if (!visible) return;
@@ -32,29 +51,18 @@ export function Toast({
       }),
     ]).start();
 
-    const t = setTimeout(() => {
-      Animated.parallel([
-        Animated.timing(translate, {
-          toValue: 80,
-          duration: 220,
-          useNativeDriver: true,
-        }),
-        Animated.timing(opacity, {
-          toValue: 0,
-          duration: 220,
-          useNativeDriver: true,
-        }),
-      ]).start(() => onHide());
-    }, duration);
+    hideTimer.current = setTimeout(dismiss, duration);
 
-    return () => clearTimeout(t);
+    return () => {
+      if (hideTimer.current) clearTimeout(hideTimer.current);
+    };
   }, [visible, duration]);
 
   if (!visible) return null;
 
   return (
     <Animated.View
-      pointerEvents="none"
+      pointerEvents="box-none"
       style={[
         styles.wrap,
         { transform: [{ translateY: translate }], opacity },
@@ -63,6 +71,21 @@ export function Toast({
       <View style={styles.pill}>
         <View style={styles.dot} />
         <Text style={styles.text}>{message}</Text>
+        {action && (
+          <Pressable
+            onPress={() => {
+              if (hideTimer.current) clearTimeout(hideTimer.current);
+              action.onPress();
+              dismiss();
+            }}
+            hapticOnPress="light"
+            hitSlop={8}
+            scaleTo={1}
+            style={styles.action}
+          >
+            <Text style={styles.actionText}>{action.label}</Text>
+          </Pressable>
+        )}
       </View>
     </Animated.View>
   );
@@ -80,7 +103,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: theme.colors.text,
-    paddingHorizontal: 16,
+    paddingLeft: 16,
+    paddingRight: 8,
     paddingVertical: 10,
     borderRadius: theme.radius.pill,
     shadowColor: '#000',
@@ -100,5 +124,16 @@ const styles = StyleSheet.create({
     color: theme.colors.bg,
     fontSize: 15,
     fontWeight: '600',
+    paddingRight: 8,
+  },
+  action: {
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    marginLeft: 4,
+  },
+  actionText: {
+    color: theme.colors.accentSoft,
+    fontSize: 15,
+    fontWeight: '700',
   },
 });

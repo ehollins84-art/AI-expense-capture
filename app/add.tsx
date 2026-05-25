@@ -16,10 +16,12 @@ import * as ImagePicker from 'expo-image-picker';
 import { Screen } from '../components/Screen';
 import { Pressable } from '../components/Pressable';
 import { ExtractingState } from '../components/ExtractingState';
+import { DatePickerModal } from '../components/DatePickerModal';
 import { theme } from '../lib/theme';
 import { useStore, useActiveProject } from '../lib/store';
 import { categoriesForProject } from '../lib/categories';
 import { extractReceipt, claudeConfigured } from '../lib/claude';
+import { formatDate } from '../lib/format';
 import { haptic } from '../lib/haptics';
 import { signalReceiptSaved } from '../lib/uiSignals';
 import type { ExtractedReceipt } from '../lib/types';
@@ -40,6 +42,7 @@ export default function AddExpense() {
   const [category, setCategory] = useState('');
   const [amount, setAmount] = useState('');
   const [currency, setCurrency] = useState('USD');
+  const [datePickerOpen, setDatePickerOpen] = useState(false);
 
   const pickedRef = useRef(false);
 
@@ -201,12 +204,24 @@ export default function AddExpense() {
             onChangeText={setTitle}
             placeholder="Home Depot - Painting Supplies"
           />
-          <Field
-            label="Date"
-            value={date}
-            onChangeText={setDate}
-            placeholder="YYYY-MM-DD"
-          />
+
+          <Text style={styles.fieldLabel}>Date</Text>
+          <Pressable
+            style={styles.dateButton}
+            hapticOnPress="select"
+            scaleTo={1}
+            onPress={() => setDatePickerOpen(true)}
+          >
+            <Text
+              style={[
+                styles.dateButtonText,
+                !date && { color: theme.colors.textSubtle },
+              ]}
+            >
+              {date ? formatDate(date) : 'Pick a date'}
+            </Text>
+            <Text style={styles.dateButtonGlyph}>›</Text>
+          </Pressable>
 
           <Text style={styles.fieldLabel}>Category</Text>
           <View style={styles.categoryGrid}>
@@ -255,6 +270,16 @@ export default function AddExpense() {
 
           <View style={{ height: theme.spacing.xxl }} />
         </ScrollView>
+
+        <DatePickerModal
+          visible={datePickerOpen}
+          initialDate={date || new Date().toISOString().slice(0, 10)}
+          onSubmit={(iso) => {
+            setDate(iso);
+            setDatePickerOpen(false);
+          }}
+          onDismiss={() => setDatePickerOpen(false)}
+        />
 
         <View style={styles.bottomBar}>
           <Pressable
@@ -340,6 +365,27 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.md,
     paddingHorizontal: 14,
     paddingVertical: 12,
+  },
+  dateButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: theme.colors.surface,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.md,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    marginBottom: theme.spacing.md,
+  },
+  dateButtonText: {
+    ...theme.type.body,
+    color: theme.colors.text,
+  },
+  dateButtonGlyph: {
+    fontSize: 22,
+    color: theme.colors.textSubtle,
+    marginTop: -2,
   },
   categoryGrid: {
     flexDirection: 'row',

@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { FlatList, StyleSheet, Text, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Screen } from '../../components/Screen';
@@ -6,6 +6,7 @@ import { Pressable } from '../../components/Pressable';
 import { useStore, useActiveProject } from '../../lib/store';
 import { theme } from '../../lib/theme';
 import { formatDate, formatMoney, moneyTextStyle } from '../../lib/format';
+import { isPending, subscribePending } from '../../lib/pendingDelete';
 
 export default function CategoryView() {
   const router = useRouter();
@@ -13,6 +14,11 @@ export default function CategoryView() {
   const { expenses } = useStore();
   const active = useActiveProject();
   const targetYear = year ? parseInt(year, 10) : new Date().getFullYear();
+  const [, setPendingTick] = useState(0);
+
+  useEffect(() => {
+    return subscribePending(() => setPendingTick((t) => t + 1));
+  }, []);
 
   const items = useMemo(() => {
     if (!active) return [];
@@ -21,7 +27,8 @@ export default function CategoryView() {
         (e) =>
           e.projectId === active.id &&
           e.category === name &&
-          new Date(e.date).getFullYear() === targetYear,
+          new Date(e.date).getFullYear() === targetYear &&
+          !isPending(e.id),
       )
       .sort((a, b) => (a.date < b.date ? 1 : -1));
   }, [expenses, active, name, targetYear]);
