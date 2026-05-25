@@ -17,6 +17,7 @@ import {
   writeProjects,
   newId,
   deleteExpense as deleteExpenseFs,
+  updateExpense as updateExpenseFs,
 } from './storage';
 import {
   getStoredIteration,
@@ -45,6 +46,7 @@ type StoreCtx = StoreState & {
     expense: Omit<Expense, 'id' | 'createdAt' | 'imageFilename'>,
     imageUri: string,
   ) => Promise<Expense>;
+  updateExpense: (expense: Expense) => Promise<Expense>;
   removeExpense: (expense: Expense) => Promise<void>;
   refresh: () => Promise<void>;
 };
@@ -166,6 +168,19 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     [iteration],
   );
 
+  const updateExpense = useCallback(
+    async (next: Expense): Promise<Expense> => {
+      const old = expenses.find((e) => e.id === next.id);
+      if (!old) return next;
+      const stored = await updateExpenseFs(iteration, old, next);
+      setExpenses((prev) =>
+        prev.map((e) => (e.id === stored.id ? stored : e)),
+      );
+      return stored;
+    },
+    [expenses, iteration],
+  );
+
   const value = useMemo<StoreCtx>(
     () => ({
       iteration,
@@ -177,6 +192,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       setActiveProject,
       addProject,
       saveExpenseAndSync,
+      updateExpense,
       removeExpense,
       refresh,
     }),
@@ -190,6 +206,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       setActiveProject,
       addProject,
       saveExpenseAndSync,
+      updateExpense,
       removeExpense,
       refresh,
     ],

@@ -174,3 +174,45 @@ export async function deleteExpense(
     all.filter((e) => e.id !== expense.id),
   );
 }
+
+export async function updateExpense(
+  letter: string,
+  oldExpense: Expense,
+  newExpense: Expense,
+): Promise<Expense> {
+  const oldYear = new Date(oldExpense.date).getFullYear();
+  const newYear = new Date(newExpense.date).getFullYear();
+  const oldFolder = `${yearDir(letter, oldExpense.projectId, oldYear)}${expenseFolderName(oldExpense)}/`;
+  const newFolder = `${yearDir(letter, newExpense.projectId, newYear)}${expenseFolderName(newExpense)}/`;
+
+  if (oldFolder !== newFolder) {
+    await ensureDir(yearDir(letter, newExpense.projectId, newYear));
+    const conflict = await FileSystem.getInfoAsync(newFolder);
+    if (conflict.exists) {
+      await FileSystem.deleteAsync(newFolder, { idempotent: true });
+    }
+    await FileSystem.moveAsync({ from: oldFolder, to: newFolder });
+  }
+
+  const metaText = [
+    `Title: ${newExpense.title}`,
+    `Date: ${newExpense.date}`,
+    `Category: ${newExpense.category}`,
+    `Amount: ${newExpense.currency} ${newExpense.amount.toFixed(2)}`,
+    newExpense.notes ? `Notes: ${newExpense.notes}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
+  await FileSystem.writeAsStringAsync(`${newFolder}metadata.txt`, metaText);
+  await FileSystem.writeAsStringAsync(
+    `${newFolder}metadata.json`,
+    JSON.stringify(newExpense, null, 2),
+  );
+
+  const all = await readExpenses(letter);
+  await writeExpenses(
+    letter,
+    all.map((e) => (e.id === newExpense.id ? newExpense : e)),
+  );
+  return newExpense;
+}
