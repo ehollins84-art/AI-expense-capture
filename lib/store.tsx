@@ -23,6 +23,7 @@ import {
   getStoredIteration,
   getStoredToken,
   setStoredIteration,
+  updateExpenseOnDrive,
   uploadExpenseToDrive,
 } from './drive';
 
@@ -176,9 +177,20 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       setExpenses((prev) =>
         prev.map((e) => (e.id === stored.id ? stored : e)),
       );
+
+      // Background Drive sync — best-effort.
+      const token = await getStoredToken();
+      if (token) {
+        const proj = projects.find((p) => p.id === stored.projectId);
+        if (proj) {
+          updateExpenseOnDrive(token, iteration, proj.name, old, stored).catch(
+            (err) => console.warn('Drive update failed:', err),
+          );
+        }
+      }
       return stored;
     },
-    [expenses, iteration],
+    [expenses, iteration, projects],
   );
 
   const value = useMemo<StoreCtx>(

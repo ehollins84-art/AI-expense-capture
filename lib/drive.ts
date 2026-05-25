@@ -170,6 +170,99 @@ async function uploadFile(
   }
 }
 
+async function findFileInFolder(
+  token: string,
+  parentId: string,
+  name: string,
+  mimeType?: string,
+): Promise<string | null> {
+  const mimeClause = mimeType ? ` and mimeType='${mimeType}'` : '';
+  const q = encodeURIComponent(
+    `name='${name.replace(/'/g, "\\'")}' and '${parentId}' in parents and trashed=false${mimeClause}`,
+  );
+  const resp = await driveFetch(
+    token,
+    `drive/v3/files?q=${q}&fields=files(id,name)`,
+  );
+  if (!resp.ok) return null;
+  const json = (await resp.json()) as {
+    files: Array<{ id: string; name: string }>;
+  };
+  return json.files[0]?.id ?? null;
+}
+
+async function renameFile(
+  token: string,
+  fileId: string,
+  newName: string,
+): Promise<void> {
+  const resp = await driveFetch(token, `drive/v3/files/${fileId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: newName }),
+  });
+  if (!resp.ok) {
+    throw new Error(`Drive rename failed: ${resp.status}`);
+  }
+}
+
+async function moveFile(
+  token: string,
+  fileId: string,
+  newParentId: string,
+  oldParentId: string,
+): Promise<void> {
+  const resp = await driveFetch(
+    token,
+    `drive/v3/files/${fileId}?addParents=${newParentId}&removeParents=${oldParentId}`,
+    { method: 'PATCH' },
+  );
+  if (!resp.ok) {
+    throw new Error(`Drive move failed: ${resp.status}`);
+  }
+}
+
+async function updateFileContent(
+  token: string,
+  fileId: string,
+  mediaType: string,
+  body: string,
+): Promise<void> {
+  const resp = await fetch(
+    `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media`,
+    {
+      method: 'PATCH',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': mediaType,
+      },
+      body,
+    },
+  );
+  if (!resp.ok) {
+    const txt = await resp.text();
+    throw new Error(
+      `Drive update content failed: ${resp.status} ${txt.slice(0, 200)}`,
+    );
+  }
+}
+
+function expenseFolderName(expense: Expense): string {
+  return `${expense.date.replaceAll('-', '.')} ${expense.title.replace(/[/\\:*?"<>|]/g, '').trim()}`;
+}
+
+function metadataText(expense: Expense): string {
+  return [
+    `Title: ${expense.title}`,
+    `Date: ${expense.date}`,
+    `Category: ${expense.category}`,
+    `Amount: ${expense.currency} ${expense.amount.toFixed(2)}`,
+    expense.notes ? `Notes: ${expense.notes}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
+}
+
 export async function uploadExpenseToDrive(
   token: string,
   iteration: string,
@@ -207,7 +300,7 @@ export async function uploadExpenseToDrive(
     cache,
     `base/${iteration}/${projectName}/${year}`,
   );
-  const folderName = `${expense.date.replaceAll('-', '.')} ${expense.title.replace(/[/\\:*?"<>|]/g, '').trim()}`;
+  const folderName = expenseFolderName(expense);
   const expenseFolderId = await findOrCreateFolder(
     token,
     folderName,
@@ -231,21 +324,12 @@ export async function uploadExpenseToDrive(
     true,
   );
 
-  const metaText = [
-    `Title: ${expense.title}`,
-    `Date: ${expense.date}`,
-    `Category: ${expense.category}`,
-    `Amount: ${expense.currency} ${expense.amount.toFixed(2)}`,
-    expense.notes ? `Notes: ${expense.notes}` : '',
-  ]
-    .filter(Boolean)
-    .join('\n');
   await uploadFile(
     token,
     expenseFolderId,
     'metadata.txt',
     'text/plain',
-    metaText,
+    metadataText(expense),
   );
   await uploadFile(
     token,
@@ -254,6 +338,128 @@ export async function uploadExpenseToDrive(
     'application/json',
     JSON.stringify(expense, null, 2),
   );
+}
+
+export async function updateExpenseOnDrive(
+  token: string,
+  iteration: string,
+  projectName: string,
+  oldExpense: Expense,
+  newExpense: Expense,
+): Promise<void> {
+  const cache = await readFolderCache();
+  const baseId = await findOrCreateFolder(
+    token,
+    BASE_FOLDER_NAME,
+    undefined,
+    cache,
+    `base`,
+  );
+  const iterId = await findOrCreateFolder(
+    token,
+    iteration,
+    baseId,
+    cache,
+    `base/${iteration}`,
+  );
+  const projId = await findOrCreateFolder(
+    token,
+    projectName,
+    iterId,
+    cache,
+    `base/${iteration}/${projectName}`,
+  );
+
+  const oldYear = new Date(oldExpense.date).getFullYear().toString();
+  const newYear = new Date(newExpense.date).getFullYear().toString();
+  const oldFolderName = expenseFolderName(oldExpense);
+  const newFolderName = expenseFolderName(newExpense);
+
+  const oldYearKey = `base/${iteration}/${projectName}/${oldYear}`;
+  const oldFolderKey = `${oldYearKey}/${oldFolderName}`;
+
+  const oldYearId = await findOrCreateFolder(
+    token,
+    oldYear,
+    projId,
+    cache,
+    oldYearKey,
+  );
+
+  let expenseFolderId: string | null = cache[oldFolderKey] ?? null;
+  if (!expenseFolderId) {
+    expenseFolderId = await findFileInFolder(
+      token,
+      oldYearId,
+      oldFolderName,
+      'application/vnd.google-apps.folder',
+    );
+  }
+  if (!expenseFolderId) {
+    // Nothing to update remotely — create from scratch via uploadExpenseToDrive
+    // path so the metadata still lands in Drive.
+    return;
+  }
+
+  // Move to a new year folder if the year changed.
+  if (oldYear !== newYear) {
+    const newYearId = await findOrCreateFolder(
+      token,
+      newYear,
+      projId,
+      cache,
+      `base/${iteration}/${projectName}/${newYear}`,
+    );
+    await moveFile(token, expenseFolderId, newYearId, oldYearId);
+  }
+
+  // Rename the folder if title or date changed.
+  if (oldFolderName !== newFolderName) {
+    await renameFile(token, expenseFolderId, newFolderName);
+  }
+
+  // Refresh folder cache keys.
+  delete cache[oldFolderKey];
+  cache[`base/${iteration}/${projectName}/${newYear}/${newFolderName}`] =
+    expenseFolderId;
+  await writeFolderCache(cache);
+
+  // Rewrite metadata files in place (create if missing).
+  const txtId = await findFileInFolder(token, expenseFolderId, 'metadata.txt');
+  if (txtId) {
+    await updateFileContent(
+      token,
+      txtId,
+      'text/plain',
+      metadataText(newExpense),
+    );
+  } else {
+    await uploadFile(
+      token,
+      expenseFolderId,
+      'metadata.txt',
+      'text/plain',
+      metadataText(newExpense),
+    );
+  }
+
+  const jsonId = await findFileInFolder(
+    token,
+    expenseFolderId,
+    'metadata.json',
+  );
+  const jsonBody = JSON.stringify(newExpense, null, 2);
+  if (jsonId) {
+    await updateFileContent(token, jsonId, 'application/json', jsonBody);
+  } else {
+    await uploadFile(
+      token,
+      expenseFolderId,
+      'metadata.json',
+      'application/json',
+      jsonBody,
+    );
+  }
 }
 
 export async function fetchUserEmail(token: string): Promise<string | null> {
