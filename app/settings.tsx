@@ -31,6 +31,7 @@ import {
 import { listIterations, nextIterationLetter } from '../lib/storage';
 import { claudeConfigured } from '../lib/claude';
 import { haptic } from '../lib/haptics';
+import * as Clipboard from 'expo-clipboard';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -55,6 +56,15 @@ export default function Settings() {
     null,
   );
   const [debugVisible, setDebugVisible] = useState(false);
+  const [copiedRedirect, setCopiedRedirect] = useState(false);
+  const googleConfigured = !!GOOGLE_CLIENT_ID;
+
+  async function copyRedirectUri() {
+    await Clipboard.setStringAsync(redirectUri);
+    haptic.success();
+    setCopiedRedirect(true);
+    setTimeout(() => setCopiedRedirect(false), 1600);
+  }
 
   const redirectUri = AuthSession.makeRedirectUri({
     scheme: 'scheduleeai',
@@ -315,7 +325,7 @@ export default function Settings() {
                   <Text style={styles.btnGhostText}>Disconnect</Text>
                 </Pressable>
               </>
-            ) : (
+            ) : googleConfigured ? (
               <>
                 <Text style={styles.label}>Google Drive</Text>
                 <Text style={styles.value}>
@@ -330,6 +340,30 @@ export default function Settings() {
                 >
                   <Text style={styles.btnPrimaryText}>
                     {connecting ? 'Connecting…' : 'Connect Google Drive'}
+                  </Text>
+                </Pressable>
+              </>
+            ) : (
+              <>
+                <Text style={styles.label}>Setup needed</Text>
+                <Text style={styles.value}>
+                  Google Drive backup is built in, but Google needs to know
+                  about this app first. Create an OAuth client in Google
+                  Cloud Console and paste its Client ID into the app's
+                  config. You'll need this redirect URI on Google's side:
+                </Text>
+                <View style={styles.redirectBox}>
+                  <Text style={styles.mono} numberOfLines={2}>
+                    {redirectUri}
+                  </Text>
+                </View>
+                <Pressable
+                  style={[styles.btn, styles.btnPrimary]}
+                  hapticOnPress="success"
+                  onPress={copyRedirectUri}
+                >
+                  <Text style={styles.btnPrimaryText}>
+                    {copiedRedirect ? 'Copied ✓' : 'Copy redirect URI'}
                   </Text>
                 </Pressable>
               </>
@@ -374,7 +408,20 @@ export default function Settings() {
           <Section title="Developer">
             <Card>
               <Text style={styles.label}>Google OAuth redirect URI</Text>
-              <Text style={styles.mono}>{redirectUri}</Text>
+              <View style={styles.redirectBox}>
+                <Text style={styles.mono} numberOfLines={2}>
+                  {redirectUri}
+                </Text>
+              </View>
+              <Pressable
+                style={[styles.btn, styles.btnGhost]}
+                hapticOnPress="select"
+                onPress={copyRedirectUri}
+              >
+                <Text style={styles.btnGhostText}>
+                  {copiedRedirect ? 'Copied ✓' : 'Copy redirect URI'}
+                </Text>
+              </Pressable>
               <Text style={styles.hint}>
                 Paste this into the authorized redirect URIs of your Google
                 Cloud OAuth client.
@@ -383,6 +430,14 @@ export default function Settings() {
             <Card>
               <Text style={styles.label}>Build info</Text>
               <Text style={styles.value}>Schedule E AI · v0.1.0</Text>
+            </Card>
+            <Card>
+              <Text style={styles.label}>Google Client ID</Text>
+              <Text style={styles.value}>
+                {googleConfigured
+                  ? `Set · ${GOOGLE_CLIENT_ID.slice(0, 12)}…`
+                  : 'Not set'}
+              </Text>
             </Card>
           </Section>
         )}
@@ -485,7 +540,15 @@ const styles = StyleSheet.create({
     color: theme.colors.textMuted,
     marginTop: theme.spacing.sm,
   },
-  mono: { ...theme.type.mono, color: theme.colors.text, marginTop: 4 },
+  mono: { ...theme.type.mono, color: theme.colors.text },
+  redirectBox: {
+    backgroundColor: theme.colors.surfaceAlt,
+    borderRadius: theme.radius.md,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginTop: theme.spacing.sm,
+    marginBottom: theme.spacing.sm,
+  },
   btn: {
     borderRadius: theme.radius.pill,
     paddingVertical: 12,
