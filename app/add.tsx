@@ -15,10 +15,13 @@ import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { Screen } from '../components/Screen';
 import { Pressable } from '../components/Pressable';
+import { ExtractingState } from '../components/ExtractingState';
 import { theme } from '../lib/theme';
 import { useStore, useActiveProject } from '../lib/store';
 import { categoriesForProject } from '../lib/categories';
 import { extractReceipt, claudeConfigured } from '../lib/claude';
+import { haptic } from '../lib/haptics';
+import { signalReceiptSaved } from '../lib/uiSignals';
 import type { ExtractedReceipt } from '../lib/types';
 
 type Phase = 'picking' | 'extracting' | 'review' | 'saving';
@@ -81,7 +84,7 @@ export default function AddExpense() {
     }
     if (!claudeConfigured()) {
       setError(
-        'No Anthropic API key configured. Fill the form manually or add EXPO_PUBLIC_ANTHROPIC_API_KEY.',
+        'No AI key set up — fill in the details by hand for now.',
       );
       setDate(new Date().toISOString().slice(0, 10));
       setCategory(categoriesForProject(active)[0] ?? '');
@@ -130,8 +133,11 @@ export default function AddExpense() {
         },
         imageUri,
       );
-      router.replace('/');
+      haptic.success();
+      signalReceiptSaved();
+      router.back();
     } catch (e) {
+      haptic.error();
       const msg = e instanceof Error ? e.message : String(e);
       Alert.alert('Save failed', msg);
       setPhase('review');
@@ -151,20 +157,7 @@ export default function AddExpense() {
   if (phase === 'extracting') {
     return (
       <Screen>
-        <View style={styles.centered}>
-          {imageUri && (
-            <Image
-              source={{ uri: imageUri }}
-              style={styles.previewLarge}
-              contentFit="cover"
-            />
-          )}
-          <ActivityIndicator
-            color={theme.colors.accent}
-            style={{ marginTop: theme.spacing.lg }}
-          />
-          <Text style={styles.extractingText}>Reading your receipt…</Text>
-        </View>
+        <ExtractingState imageUri={imageUri} />
       </Screen>
     );
   }
@@ -186,7 +179,9 @@ export default function AddExpense() {
               <Text style={styles.cancelText}>Cancel</Text>
             </Pressable>
             {projects.length > 1 && active && (
-              <Text style={styles.projectTag}>{active.name}</Text>
+              <Text style={styles.projectTag} numberOfLines={1}>
+                {active.name}
+              </Text>
             )}
           </View>
 
@@ -218,6 +213,7 @@ export default function AddExpense() {
             {cats.map((c) => (
               <Pressable
                 key={c}
+                hapticOnPress="select"
                 onPress={() => setCategory(c)}
                 style={[
                   styles.catChip,
@@ -267,6 +263,7 @@ export default function AddExpense() {
               phase === 'saving' && { opacity: 0.5 },
             ]}
             disabled={phase === 'saving'}
+            hapticOnPress="light"
             onPress={handleSave}
           >
             <Text style={styles.lookGoodText}>
@@ -322,17 +319,6 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.lg,
     backgroundColor: theme.colors.surfaceAlt,
     marginBottom: theme.spacing.lg,
-  },
-  previewLarge: {
-    width: 220,
-    height: 280,
-    borderRadius: theme.radius.lg,
-    backgroundColor: theme.colors.surfaceAlt,
-  },
-  extractingText: {
-    ...theme.type.body,
-    color: theme.colors.textMuted,
-    marginTop: theme.spacing.md,
   },
   errorText: {
     ...theme.type.body,

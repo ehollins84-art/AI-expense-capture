@@ -1,6 +1,7 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
+  Animated,
   Keyboard,
   KeyboardAvoidingView,
   Platform,
@@ -16,9 +17,10 @@ import { Screen } from '../../components/Screen';
 import { Pressable } from '../../components/Pressable';
 import { useStore, useActiveProject } from '../../lib/store';
 import { theme } from '../../lib/theme';
-import { formatDate, formatMoney } from '../../lib/format';
+import { formatDate, formatMoney, moneyTextStyle } from '../../lib/format';
 import { imagePathForExpense } from '../../lib/storage';
 import { categoriesForProject } from '../../lib/categories';
+import { haptic } from '../../lib/haptics';
 import type { Expense } from '../../lib/types';
 
 type EditField = 'amount' | 'title' | 'date' | 'category' | null;
@@ -38,6 +40,20 @@ export default function ExpenseDetail() {
     amount: '',
     currency: 'USD',
   });
+  const flashAnims = useRef({
+    amount: new Animated.Value(0),
+    title: new Animated.Value(0),
+    date: new Animated.Value(0),
+    category: new Animated.Value(0),
+  }).current;
+
+  function flash(field: 'amount' | 'title' | 'date' | 'category') {
+    const v = flashAnims[field];
+    Animated.sequence([
+      Animated.timing(v, { toValue: 1, duration: 160, useNativeDriver: false }),
+      Animated.timing(v, { toValue: 0, duration: 520, useNativeDriver: false }),
+    ]).start();
+  }
 
   useEffect(() => {
     if (!expense) return;
@@ -104,7 +120,11 @@ export default function ExpenseDetail() {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(d) || isNaN(Date.parse(d))) {
         setDraft((s) => ({ ...s, date: expense.date }));
         setEditing(null);
-        Alert.alert('Invalid date', 'Use YYYY-MM-DD.');
+        haptic.warning();
+        Alert.alert(
+          'That date didn\'t look right',
+          'Enter it as year-month-day, like 2026-05-25.',
+        );
         return;
       }
       next = { ...next, date: d };
@@ -124,7 +144,10 @@ export default function ExpenseDetail() {
       const stored = await updateExpense(next);
       const p = await imagePathForExpense(iteration, stored);
       setImageUri(`${p}?t=${Date.now()}`);
+      haptic.light();
+      flash(field);
     } catch (e) {
+      haptic.error();
       const msg = e instanceof Error ? e.message : String(e);
       Alert.alert('Save failed', msg);
       setDraft({
@@ -163,10 +186,20 @@ export default function ExpenseDetail() {
           keyboardShouldPersistTaps="handled"
         >
           <View style={styles.topBar}>
-            <Pressable onPress={() => router.back()} style={styles.backBtn}>
+            <Pressable
+              onPress={() => router.back()}
+              style={styles.backBtn}
+              hapticOnPress="select"
+              hitSlop={8}
+            >
               <Text style={styles.backText}>←</Text>
             </Pressable>
-            <Pressable onPress={confirmDelete}>
+            <Pressable
+              onPress={confirmDelete}
+              hapticOnPress="warning"
+              hitSlop={8}
+              scaleTo={1}
+            >
               <Text style={styles.deleteText}>Delete</Text>
             </Pressable>
           </View>
@@ -180,7 +213,7 @@ export default function ExpenseDetail() {
                 onSubmitEditing={() => commit('amount')}
                 keyboardType="decimal-pad"
                 autoFocus
-                style={styles.amountInput}
+                style={[styles.amountInput, moneyTextStyle]}
                 placeholderTextColor={theme.colors.textSubtle}
                 placeholder="0.00"
               />
@@ -197,10 +230,29 @@ export default function ExpenseDetail() {
               />
             </View>
           ) : (
-            <Pressable onPress={() => setEditing('amount')}>
-              <Text style={styles.amount}>
-                {formatMoney(expense.amount, expense.currency)}
-              </Text>
+            <Pressable
+              onPress={() => {
+                haptic.select();
+                setEditing('amount');
+              }}
+              scaleTo={1}
+            >
+              <Animated.View
+                style={[
+                  styles.editableWrap,
+                  {
+                    backgroundColor: flashAnims.amount.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: ['transparent', theme.colors.accentSoft],
+                    }),
+                  },
+                ]}
+              >
+                <Text style={[styles.amount, moneyTextStyle]}>
+                  {formatMoney(expense.amount, expense.currency)}
+                </Text>
+                <Text style={styles.editGlyph}>✎</Text>
+              </Animated.View>
             </Pressable>
           )}
 
@@ -217,8 +269,29 @@ export default function ExpenseDetail() {
               returnKeyType="done"
             />
           ) : (
-            <Pressable onPress={() => setEditing('title')}>
-              <Text style={styles.title}>{expense.title}</Text>
+            <Pressable
+              onPress={() => {
+                haptic.select();
+                setEditing('title');
+              }}
+              scaleTo={1}
+            >
+              <Animated.View
+                style={[
+                  styles.editableWrap,
+                  {
+                    backgroundColor: flashAnims.title.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: ['transparent', theme.colors.accentSoft],
+                    }),
+                  },
+                ]}
+              >
+                <Text style={styles.title} numberOfLines={2}>
+                  {expense.title}
+                </Text>
+                <Text style={styles.editGlyph}>✎</Text>
+              </Animated.View>
             </Pressable>
           )}
 
@@ -226,8 +299,12 @@ export default function ExpenseDetail() {
             <EditableRow
               label="Date"
               isEditing={editing === 'date'}
-              onPressLabel={() => setEditing('date')}
+              onPressLabel={() => {
+                haptic.select();
+                setEditing('date');
+              }}
               displayValue={formatDate(expense.date)}
+              flash={flashAnims.date}
               editor={
                 <TextInput
                   value={draft.date}
@@ -235,7 +312,7 @@ export default function ExpenseDetail() {
                   onBlur={() => commit('date')}
                   onSubmitEditing={() => commit('date')}
                   autoFocus
-                  placeholder="YYYY-MM-DD"
+                  placeholder="2026-05-25"
                   placeholderTextColor={theme.colors.textSubtle}
                   style={styles.rowInput}
                   returnKeyType="done"
@@ -248,14 +325,39 @@ export default function ExpenseDetail() {
             <View style={styles.row}>
               <Text style={styles.rowLabel}>Category</Text>
               {editing === 'category' ? (
-                <Pressable onPress={() => setEditing(null)}>
+                <Pressable
+                  onPress={() => setEditing(null)}
+                  hapticOnPress="select"
+                  scaleTo={1}
+                >
                   <Text style={[styles.rowValue, { color: theme.colors.accent }]}>
                     Done
                   </Text>
                 </Pressable>
               ) : (
-                <Pressable onPress={() => setEditing('category')}>
-                  <Text style={styles.rowValue}>{expense.category}</Text>
+                <Pressable
+                  onPress={() => {
+                    haptic.select();
+                    setEditing('category');
+                  }}
+                  scaleTo={1}
+                >
+                  <Animated.View
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      paddingHorizontal: 6,
+                      paddingVertical: 2,
+                      borderRadius: 6,
+                      backgroundColor: flashAnims.category.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: ['transparent', theme.colors.accentSoft],
+                      }),
+                    }}
+                  >
+                    <Text style={styles.rowValue}>{expense.category}</Text>
+                    <Text style={styles.editGlyphInline}>  ✎</Text>
+                  </Animated.View>
                 </Pressable>
               )}
             </View>
@@ -265,17 +367,23 @@ export default function ExpenseDetail() {
                 {cats.map((c) => (
                   <Pressable
                     key={c}
+                    hapticOnPress="select"
                     onPress={() => {
                       setDraft((d) => ({ ...d, category: c }));
-                      // Commit immediately on selection.
                       const next: Expense = { ...expense, category: c };
                       if (next.category !== expense.category) {
-                        updateExpense(next).catch((err) => {
-                          Alert.alert(
-                            'Save failed',
-                            err instanceof Error ? err.message : String(err),
-                          );
-                        });
+                        updateExpense(next)
+                          .then(() => {
+                            haptic.light();
+                            flash('category');
+                          })
+                          .catch((err) => {
+                            haptic.error();
+                            Alert.alert(
+                              'Save failed',
+                              err instanceof Error ? err.message : String(err),
+                            );
+                          });
                       }
                       setEditing(null);
                     }}
@@ -327,12 +435,14 @@ function EditableRow({
   onPressLabel,
   displayValue,
   editor,
+  flash,
 }: {
   label: string;
   isEditing: boolean;
   onPressLabel: () => void;
   displayValue: string;
   editor: React.ReactNode;
+  flash?: Animated.Value;
 }) {
   return (
     <View style={styles.row}>
@@ -340,8 +450,25 @@ function EditableRow({
       {isEditing ? (
         <View style={{ flex: 1, alignItems: 'flex-end' }}>{editor}</View>
       ) : (
-        <Pressable onPress={onPressLabel}>
-          <Text style={styles.rowValue}>{displayValue}</Text>
+        <Pressable onPress={onPressLabel} scaleTo={1}>
+          <Animated.View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              paddingHorizontal: 6,
+              paddingVertical: 2,
+              borderRadius: 6,
+              backgroundColor: flash
+                ? flash.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: ['transparent', theme.colors.accentSoft],
+                  })
+                : 'transparent',
+            }}
+          >
+            <Text style={styles.rowValue}>{displayValue}</Text>
+            <Text style={styles.editGlyphInline}>  ✎</Text>
+          </Animated.View>
         </Pressable>
       )}
     </View>
@@ -369,6 +496,24 @@ const styles = StyleSheet.create({
   },
   backText: { fontSize: 22, color: theme.colors.text },
   deleteText: { ...theme.type.body, color: theme.colors.danger },
+  editableWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  editGlyph: {
+    fontSize: 16,
+    color: theme.colors.textSubtle,
+    marginLeft: 10,
+    marginTop: -8,
+  },
+  editGlyphInline: {
+    fontSize: 13,
+    color: theme.colors.textSubtle,
+  },
   amount: { ...theme.type.display, color: theme.colors.text },
   amountEditRow: {
     flexDirection: 'row',

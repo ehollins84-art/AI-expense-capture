@@ -14,6 +14,7 @@ import { Screen } from '../../components/Screen';
 import { Pressable } from '../../components/Pressable';
 import { useStore } from '../../lib/store';
 import { theme } from '../../lib/theme';
+import { haptic } from '../../lib/haptics';
 import {
   SCHEDULE_C_CATEGORIES,
   SCHEDULE_E_CATEGORIES,
@@ -46,8 +47,14 @@ export default function NewProject() {
         return;
       }
     }
-    await addProject(name, scheme, custom);
-    router.replace('/');
+    try {
+      await addProject(name, scheme, custom);
+      haptic.success();
+      router.back();
+    } catch (e) {
+      haptic.error();
+      Alert.alert('Couldn\'t create project', e instanceof Error ? e.message : String(e));
+    }
   }
 
   const preview =
@@ -71,7 +78,12 @@ export default function NewProject() {
           keyboardShouldPersistTaps="handled"
         >
           <View style={styles.topBar}>
-            <Pressable onPress={() => router.back()}>
+            <Pressable
+              onPress={() => router.back()}
+              hapticOnPress="select"
+              hitSlop={12}
+              scaleTo={1}
+            >
               <Text style={styles.cancelText}>Cancel</Text>
             </Pressable>
           </View>
@@ -144,7 +156,11 @@ export default function NewProject() {
         </ScrollView>
 
         <View style={styles.bottomBar}>
-          <Pressable style={styles.cta} onPress={handleCreate}>
+          <Pressable
+            style={styles.cta}
+            hapticOnPress="light"
+            onPress={handleCreate}
+          >
             <Text style={styles.ctaText}>Create project</Text>
           </Pressable>
         </View>
@@ -165,6 +181,7 @@ function SchemeOption({
   return (
     <Pressable
       onPress={onPress}
+      hapticOnPress="select"
       style={[styles.schemeRow, selected && styles.schemeRowActive]}
     >
       <View

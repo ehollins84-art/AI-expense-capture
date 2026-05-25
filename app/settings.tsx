@@ -30,6 +30,7 @@ import {
 } from '../lib/drive';
 import { listIterations, nextIterationLetter } from '../lib/storage';
 import { claudeConfigured } from '../lib/claude';
+import { haptic } from '../lib/haptics';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -53,6 +54,7 @@ export default function Settings() {
   const [importProgress, setImportProgress] = useState<ImportProgress | null>(
     null,
   );
+  const [debugVisible, setDebugVisible] = useState(false);
 
   const redirectUri = AuthSession.makeRedirectUri({
     scheme: 'scheduleeai',
@@ -146,11 +148,11 @@ export default function Settings() {
       const latest = remote[remote.length - 1];
       const warning = await checkConcurrentDevice(latest);
       const concurrentNote = warning
-        ? `\n\nNote: another device wrote to iteration ${latest} ${formatAge(warning.ageMs)} ago. Avoid editing on both devices.`
+        ? `\n\nNote: another device wrote to backup ${latest} ${formatAge(warning.ageMs)} ago. Avoid editing on both devices.`
         : '';
       Alert.alert(
         'Restore from Drive?',
-        `Iteration${remote.length > 1 ? 's' : ''} ${remote.join(', ')} found in your Drive.${concurrentNote}`,
+        `Backup${remote.length > 1 ? 's' : ''} ${remote.join(', ')} found in your Drive.${concurrentNote}`,
         [
           {
             text: 'Import latest',
@@ -205,8 +207,8 @@ export default function Settings() {
   async function handleConnect() {
     if (!GOOGLE_CLIENT_ID) {
       Alert.alert(
-        'Google client ID missing',
-        `Set EXPO_PUBLIC_GOOGLE_CLIENT_ID in your .env. Use this redirect URI when creating the OAuth client:\n\n${redirectUri}`,
+        'Google Drive isn\'t set up',
+        'This build is missing the Google Drive credentials needed to sign in. Long-press the Settings title for setup details.',
       );
       return;
     }
@@ -239,16 +241,16 @@ export default function Settings() {
     }
     const remote = await listRemoteIterations();
     if (remote.length === 0) {
-      Alert.alert('Nothing on Drive', 'No iterations found in your Drive.');
+      Alert.alert('Nothing on Drive', 'No backups found in your Drive.');
       return;
     }
     Alert.alert(
       'Import from Drive',
-      `Found iteration${remote.length > 1 ? 's' : ''} ${remote.join(', ')}. Importing merges anything new into your local data.`,
+      `Found backup${remote.length > 1 ? 's' : ''} ${remote.join(', ')}. Importing merges anything new into your local data.`,
       [
         { text: 'Cancel', style: 'cancel' },
         ...remote.map((it) => ({
-          text: `Import ${it}`,
+          text: `Import backup ${it}`,
           onPress: () => runImport(it),
         })),
       ],
@@ -258,13 +260,39 @@ export default function Settings() {
   return (
     <Screen>
       <View style={styles.topBar}>
-        <Pressable onPress={() => router.back()}>
+        <Pressable
+          onPress={() => router.back()}
+          hapticOnPress="select"
+          hitSlop={12}
+          scaleTo={1}
+        >
           <Text style={styles.cancelText}>Done</Text>
         </Pressable>
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll}>
-        <Text style={styles.heading}>Settings</Text>
+        <Pressable
+          onLongPress={() => {
+            haptic.medium();
+            setDebugVisible((v) => !v);
+          }}
+          delayLongPress={600}
+          scaleTo={1}
+        >
+          <Text style={styles.heading}>Settings</Text>
+        </Pressable>
+
+        <Section title="Backup">
+          <Card>
+            <Text style={styles.label}>Current backup</Text>
+            <Text style={styles.iteration}>{iteration}</Text>
+            <Text style={styles.hint}>
+              Everything you've captured is grouped under backup {iteration}.
+              On a new phone, connect Drive and choose Import to bring it
+              back — or Start fresh to begin a new lettered backup.
+            </Text>
+          </Card>
+        </Section>
 
         <Section title="Cloud sync">
           <Card>
@@ -274,12 +302,14 @@ export default function Settings() {
                 <Text style={styles.value}>{driveEmail}</Text>
                 <Pressable
                   style={[styles.btn, styles.btnGhost]}
+                  hapticOnPress="select"
                   onPress={handleManualImport}
                 >
                   <Text style={styles.btnGhostText}>Import from Drive</Text>
                 </Pressable>
                 <Pressable
                   style={[styles.btn, styles.btnGhost]}
+                  hapticOnPress="select"
                   onPress={handleDisconnect}
                 >
                   <Text style={styles.btnGhostText}>Disconnect</Text>
@@ -289,11 +319,12 @@ export default function Settings() {
               <>
                 <Text style={styles.label}>Google Drive</Text>
                 <Text style={styles.value}>
-                  Back up your receipts and metadata to your own Drive. Sign in
-                  once and we'll keep everything in sync.
+                  Back up your receipts and metadata to your own Drive. Sign
+                  in once and we'll keep everything in sync.
                 </Text>
                 <Pressable
                   style={[styles.btn, styles.btnPrimary]}
+                  hapticOnPress="light"
                   onPress={handleConnect}
                   disabled={connecting || !request}
                 >
@@ -303,18 +334,6 @@ export default function Settings() {
                 </Pressable>
               </>
             )}
-          </Card>
-        </Section>
-
-        <Section title="Iteration">
-          <Card>
-            <Text style={styles.label}>Current</Text>
-            <Text style={styles.iteration}>{iteration}</Text>
-            <Text style={styles.hint}>
-              All your data is stored under iteration {iteration}. On a new
-              device, connect Drive and choose Import to bring it back; choose
-              Start fresh to create a new iteration letter instead.
-            </Text>
           </Card>
         </Section>
 
@@ -333,6 +352,7 @@ export default function Settings() {
           )}
           <Pressable
             style={[styles.btn, styles.btnGhost, { marginTop: theme.spacing.sm }]}
+            hapticOnPress="select"
             onPress={() => router.push('/projects/new')}
           >
             <Text style={styles.btnGhostText}>+ New project</Text>
@@ -341,25 +361,31 @@ export default function Settings() {
 
         <Section title="AI">
           <Card>
-            <Text style={styles.label}>Anthropic API key</Text>
+            <Text style={styles.label}>Receipt reading</Text>
             <Text style={styles.value}>
               {claudeConfigured()
-                ? 'Configured via .env'
-                : 'Not configured — receipt extraction is disabled.'}
+                ? 'Set up — receipts are read automatically.'
+                : "Not set up — you'll fill in receipt details by hand."}
             </Text>
           </Card>
         </Section>
 
-        <Section title="Debug">
-          <Card>
-            <Text style={styles.label}>Redirect URI for Google OAuth</Text>
-            <Text style={styles.mono}>{redirectUri}</Text>
-            <Text style={styles.hint}>
-              Add this URL to your Google Cloud OAuth client's authorized
-              redirect URIs.
-            </Text>
-          </Card>
-        </Section>
+        {debugVisible && (
+          <Section title="Developer">
+            <Card>
+              <Text style={styles.label}>Google OAuth redirect URI</Text>
+              <Text style={styles.mono}>{redirectUri}</Text>
+              <Text style={styles.hint}>
+                Paste this into the authorized redirect URIs of your Google
+                Cloud OAuth client.
+              </Text>
+            </Card>
+            <Card>
+              <Text style={styles.label}>Build info</Text>
+              <Text style={styles.value}>Schedule E AI · v0.1.0</Text>
+            </Card>
+          </Section>
+        )}
 
         <View style={{ height: theme.spacing.xxl }} />
       </ScrollView>

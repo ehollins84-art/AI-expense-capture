@@ -1,0 +1,188 @@
+import React, { useEffect, useRef, useState } from 'react';
+import {
+  Animated,
+  Easing,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+import { Image } from 'expo-image';
+import { theme } from '../lib/theme';
+
+const STEPS = [
+  'Reading the receipt…',
+  'Finding the merchant…',
+  'Pulling the total…',
+  'Picking a category…',
+];
+
+export function ExtractingState({ imageUri }: { imageUri: string | null }) {
+  const sweep = useRef(new Animated.Value(0)).current;
+  const fade = useRef(new Animated.Value(1)).current;
+  const [stepIndex, setStepIndex] = useState(0);
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.timing(sweep, {
+        toValue: 1,
+        duration: 1600,
+        easing: Easing.inOut(Easing.cubic),
+        useNativeDriver: true,
+      }),
+    ).start();
+
+    const id = setInterval(() => {
+      Animated.timing(fade, {
+        toValue: 0,
+        duration: 180,
+        useNativeDriver: true,
+      }).start(() => {
+        setStepIndex((i) => (i + 1) % STEPS.length);
+        Animated.timing(fade, {
+          toValue: 1,
+          duration: 220,
+          useNativeDriver: true,
+        }).start();
+      });
+    }, 1500);
+
+    return () => clearInterval(id);
+  }, []);
+
+  const sweepY = sweep.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-12, 280],
+  });
+
+  return (
+    <View style={styles.wrap}>
+      <View style={styles.imageFrame}>
+        {imageUri && (
+          <Image
+            source={{ uri: imageUri }}
+            style={styles.image}
+            contentFit="cover"
+          />
+        )}
+        <Animated.View
+          pointerEvents="none"
+          style={[styles.sweep, { transform: [{ translateY: sweepY }] }]}
+        />
+        <View pointerEvents="none" style={styles.corner_tl} />
+        <View pointerEvents="none" style={styles.corner_tr} />
+        <View pointerEvents="none" style={styles.corner_bl} />
+        <View pointerEvents="none" style={styles.corner_br} />
+      </View>
+
+      <Animated.Text style={[styles.stepText, { opacity: fade }]}>
+        {STEPS[stepIndex]}
+      </Animated.Text>
+
+      <View style={styles.dots}>
+        {STEPS.map((_, i) => (
+          <View
+            key={i}
+            style={[
+              styles.dot,
+              i === stepIndex && styles.dotActive,
+            ]}
+          />
+        ))}
+      </View>
+    </View>
+  );
+}
+
+const IMG_W = 220;
+const IMG_H = 280;
+
+const styles = StyleSheet.create({
+  wrap: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: theme.spacing.lg,
+  },
+  imageFrame: {
+    width: IMG_W,
+    height: IMG_H,
+    borderRadius: theme.radius.lg,
+    backgroundColor: theme.colors.surfaceAlt,
+    overflow: 'hidden',
+  },
+  image: {
+    width: '100%',
+    height: '100%',
+  },
+  sweep: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    height: 24,
+    backgroundColor: 'rgba(198, 99, 58, 0.18)',
+    borderTopWidth: 1.5,
+    borderTopColor: theme.colors.accent,
+  },
+  corner_tl: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    width: 18,
+    height: 18,
+    borderTopWidth: 2,
+    borderLeftWidth: 2,
+    borderColor: theme.colors.accent,
+  },
+  corner_tr: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 18,
+    height: 18,
+    borderTopWidth: 2,
+    borderRightWidth: 2,
+    borderColor: theme.colors.accent,
+  },
+  corner_bl: {
+    position: 'absolute',
+    bottom: 8,
+    left: 8,
+    width: 18,
+    height: 18,
+    borderBottomWidth: 2,
+    borderLeftWidth: 2,
+    borderColor: theme.colors.accent,
+  },
+  corner_br: {
+    position: 'absolute',
+    bottom: 8,
+    right: 8,
+    width: 18,
+    height: 18,
+    borderBottomWidth: 2,
+    borderRightWidth: 2,
+    borderColor: theme.colors.accent,
+  },
+  stepText: {
+    ...theme.type.body,
+    color: theme.colors.text,
+    marginTop: theme.spacing.lg,
+    textAlign: 'center',
+    minHeight: 22,
+  },
+  dots: {
+    flexDirection: 'row',
+    gap: 6,
+    marginTop: theme.spacing.md,
+  },
+  dot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: theme.colors.border,
+  },
+  dotActive: {
+    backgroundColor: theme.colors.accent,
+    width: 18,
+  },
+});

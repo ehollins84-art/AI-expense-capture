@@ -1,37 +1,56 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   FlatList,
+  RefreshControl,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
 import { Link, useRouter, useFocusEffect } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Screen } from '../components/Screen';
 import { Pressable } from '../components/Pressable';
+import { CameraIcon } from '../components/CameraIcon';
+import { Toast } from '../components/Toast';
 import { useStore, useActiveProject } from '../lib/store';
 import { theme } from '../lib/theme';
-import { formatMoneyCompact, formatMoney } from '../lib/format';
+import { formatMoneyCompact, formatMoney, moneyTextStyle } from '../lib/format';
 import { categoriesForProject } from '../lib/categories';
+import { haptic } from '../lib/haptics';
+import { consumeReceiptSaved, subscribeReceiptSaved } from '../lib/uiSignals';
 
 export default function Home() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const {
     projects,
     expenses,
     iteration,
-    activeProjectId,
     setActiveProject,
     loading,
     refresh,
   } = useStore();
   const active = useActiveProject();
   const [year, setYear] = useState<number>(new Date().getFullYear());
+  const [refreshing, setRefreshing] = useState(false);
+  const [savedToast, setSavedToast] = useState(false);
 
   useFocusEffect(
     React.useCallback(() => {
       refresh();
+      if (consumeReceiptSaved() !== null) {
+        setSavedToast(true);
+      }
     }, [refresh]),
   );
+
+  useEffect(() => {
+    return subscribeReceiptSaved(() => {
+      if (consumeReceiptSaved() !== null) {
+        setSavedToast(true);
+      }
+    });
+  }, []);
 
   const availableYears = useMemo(() => {
     const years = new Set<number>([new Date().getFullYear()]);
@@ -65,6 +84,16 @@ export default function Home() {
       .sort((a, b) => b[1] - a[1]);
   }, [projectExpenses, active]);
 
+  async function handleRefresh() {
+    setRefreshing(true);
+    haptic.light();
+    try {
+      await refresh();
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
   if (loading) {
     return (
       <Screen>
@@ -81,7 +110,7 @@ export default function Home() {
         <View style={styles.headerRow}>
           <Text style={styles.appTitle}>Schedule E AI</Text>
           <Link href="/settings" asChild>
-            <Pressable style={styles.gear}>
+            <Pressable style={styles.gear} hitSlop={8} hapticOnPress="select">
               <Text style={styles.gearText}>⚙︎</Text>
             </Pressable>
           </Link>
@@ -93,6 +122,7 @@ export default function Home() {
           </Text>
           <Pressable
             style={styles.primaryCta}
+            hapticOnPress="light"
             onPress={() => router.push('/projects/new')}
           >
             <Text style={styles.primaryCtaText}>New project</Text>
@@ -106,13 +136,20 @@ export default function Home() {
     <Screen>
       <View style={styles.headerRow}>
         <Pressable
-          style={styles.iterationPill}
+          style={styles.backupPill}
+          hapticOnPress="select"
+          hitSlop={6}
           onPress={() => router.push('/settings')}
         >
-          <Text style={styles.iterationPillText}>{iteration}</Text>
+          <View style={styles.backupDot} />
+          <Text style={styles.backupPillText}>Backup {iteration}</Text>
         </Pressable>
         <Link href="/settings" asChild>
-          <Pressable style={styles.gear}>
+          <Pressable
+            style={styles.gear}
+            hitSlop={8}
+            hapticOnPress="select"
+          >
             <Text style={styles.gearText}>⚙︎</Text>
           </Pressable>
         </Link>
@@ -130,6 +167,7 @@ export default function Home() {
             const isActive = item.id === (active?.id ?? null);
             return (
               <Pressable
+                hapticOnPress="select"
                 onPress={() => setActiveProject(item.id)}
                 style={[
                   styles.projectChip,
@@ -137,6 +175,7 @@ export default function Home() {
                 ]}
               >
                 <Text
+                  numberOfLines={1}
                   style={[
                     styles.projectChipText,
                     isActive && styles.projectChipTextActive,
@@ -149,6 +188,7 @@ export default function Home() {
           }}
           ListFooterComponent={
             <Pressable
+              hapticOnPress="select"
               onPress={() => router.push('/projects/new')}
               style={[styles.projectChip, styles.projectChipGhost]}
             >
@@ -159,19 +199,22 @@ export default function Home() {
       </View>
 
       <View style={styles.totalBlock}>
-        <Text style={styles.totalAmount}>
+        <Text style={styles.totalEyebrow}>Total · {year}</Text>
+        <Text style={[styles.totalAmount, moneyTextStyle]}>
           {formatMoneyCompact(total, currency)}
         </Text>
         <View style={styles.yearRow}>
           {availableYears.map((y) => (
             <Pressable
               key={y}
+              hapticOnPress="select"
               onPress={() => setYear(y)}
               style={[styles.yearChip, y === year && styles.yearChipActive]}
             >
               <Text
                 style={[
                   styles.yearChipText,
+                  moneyTextStyle,
                   y === year && styles.yearChipTextActive,
                 ]}
               >
@@ -188,19 +231,28 @@ export default function Home() {
         contentContainerStyle={{
           paddingHorizontal: theme.spacing.lg,
           paddingTop: theme.spacing.sm,
-          paddingBottom: 120,
+          paddingBottom: 140,
         }}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor={theme.colors.accent}
+            colors={[theme.colors.accent]}
+          />
+        }
         ItemSeparatorComponent={() => <View style={{ height: 1, backgroundColor: theme.colors.border }} />}
         ListEmptyComponent={
           <View style={styles.emptyState}>
             <Text style={styles.emptyTitle}>No expenses yet for {year}.</Text>
             <Text style={styles.emptySubtitle}>
-              Tap the + button to add your first receipt.
+              Tap the camera button to capture your first receipt.
             </Text>
           </View>
         }
         renderItem={({ item: [category, amount] }) => (
           <Pressable
+            hapticOnPress="select"
             onPress={() =>
               router.push({
                 pathname: '/category/[name]',
@@ -209,8 +261,10 @@ export default function Home() {
             }
             style={styles.categoryRow}
           >
-            <Text style={styles.categoryName}>{category}</Text>
-            <Text style={styles.categoryAmount}>
+            <Text style={styles.categoryName} numberOfLines={1}>
+              {category}
+            </Text>
+            <Text style={[styles.categoryAmount, moneyTextStyle]}>
               {formatMoney(amount, currency)}
             </Text>
           </Pressable>
@@ -218,15 +272,28 @@ export default function Home() {
       />
 
       <Pressable
-        style={styles.fab}
+        style={[
+          styles.fab,
+          { bottom: Math.max(insets.bottom + 16, 28) },
+        ]}
+        hapticOnPress="medium"
+        scaleTo={0.92}
         onPress={() => router.push('/add')}
-        onLongPress={() =>
-          router.push({ pathname: '/add', params: { source: 'library' } })
-        }
+        onLongPress={() => {
+          haptic.light();
+          router.push({ pathname: '/add', params: { source: 'library' } });
+        }}
         delayLongPress={300}
+        hitSlop={8}
       >
-        <Text style={styles.fabPlus}>+</Text>
+        <CameraIcon size={28} color="#fff" />
       </Pressable>
+
+      <Toast
+        visible={savedToast}
+        message="Receipt saved"
+        onHide={() => setSavedToast(false)}
+      />
     </Screen>
   );
 }
@@ -243,13 +310,23 @@ const styles = StyleSheet.create({
     paddingBottom: theme.spacing.md,
   },
   appTitle: { ...theme.type.title, color: theme.colors.text },
-  iterationPill: {
-    paddingHorizontal: 14,
+  backupPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingLeft: 10,
+    paddingRight: 14,
     paddingVertical: 6,
     borderRadius: theme.radius.pill,
     backgroundColor: theme.colors.surfaceAlt,
   },
-  iterationPillText: {
+  backupDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: theme.colors.success,
+    marginRight: 8,
+  },
+  backupPillText: {
     ...theme.type.label,
     color: theme.colors.textMuted,
   },
@@ -299,6 +376,7 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.surface,
     borderWidth: 1,
     borderColor: theme.colors.border,
+    maxWidth: 200,
   },
   projectChipActive: {
     backgroundColor: theme.colors.text,
@@ -313,12 +391,19 @@ const styles = StyleSheet.create({
   projectChipGhostText: { ...theme.type.label, color: theme.colors.textMuted },
   totalBlock: {
     paddingHorizontal: theme.spacing.lg,
-    paddingTop: theme.spacing.md,
+    paddingTop: theme.spacing.lg,
     paddingBottom: theme.spacing.md,
   },
+  totalEyebrow: {
+    ...theme.type.label,
+    color: theme.colors.textMuted,
+    textTransform: 'uppercase',
+    marginBottom: 8,
+  },
   totalAmount: {
-    ...theme.type.display,
-    fontSize: 48,
+    fontSize: 56,
+    fontWeight: '600',
+    letterSpacing: -1,
     color: theme.colors.text,
   },
   yearRow: {
@@ -340,8 +425,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingVertical: 18,
+    gap: 12,
   },
-  categoryName: { ...theme.type.body, color: theme.colors.text },
+  categoryName: { ...theme.type.body, color: theme.colors.text, flex: 1 },
   categoryAmount: { ...theme.type.bodyStrong, color: theme.colors.text },
   emptyState: {
     paddingTop: theme.spacing.xxl,
@@ -356,7 +442,6 @@ const styles = StyleSheet.create({
   fab: {
     position: 'absolute',
     right: 22,
-    bottom: 32,
     width: 64,
     height: 64,
     borderRadius: 32,
@@ -369,5 +454,4 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     elevation: 8,
   },
-  fabPlus: { fontSize: 32, color: '#fff', marginTop: -2 },
 });

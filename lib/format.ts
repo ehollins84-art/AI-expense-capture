@@ -1,3 +1,7 @@
+export const moneyTextStyle = {
+  fontVariant: ['tabular-nums' as const],
+};
+
 export function formatMoney(amount: number, currency = 'USD'): string {
   try {
     return new Intl.NumberFormat('en-US', {

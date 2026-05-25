@@ -5,7 +5,7 @@ import { Screen } from '../../components/Screen';
 import { Pressable } from '../../components/Pressable';
 import { useStore, useActiveProject } from '../../lib/store';
 import { theme } from '../../lib/theme';
-import { formatDate, formatMoney } from '../../lib/format';
+import { formatDate, formatMoney, moneyTextStyle } from '../../lib/format';
 
 export default function CategoryView() {
   const router = useRouter();
@@ -32,13 +32,22 @@ export default function CategoryView() {
   return (
     <Screen>
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()} style={styles.backBtn}>
+        <Pressable
+          onPress={() => router.back()}
+          style={styles.backBtn}
+          hapticOnPress="select"
+          hitSlop={8}
+        >
           <Text style={styles.backText}>←</Text>
         </Pressable>
         <View style={{ flex: 1 }}>
           <Text style={styles.eyebrow}>{targetYear}</Text>
-          <Text style={styles.title}>{name}</Text>
-          <Text style={styles.total}>{formatMoney(total, currency)}</Text>
+          <Text style={styles.title} numberOfLines={2}>
+            {name}
+          </Text>
+          <Text style={[styles.total, moneyTextStyle]}>
+            {formatMoney(total, currency)}
+          </Text>
         </View>
       </View>
 
@@ -57,6 +66,7 @@ export default function CategoryView() {
         renderItem={({ item }) => (
           <Pressable
             style={styles.row}
+            hapticOnPress="select"
             onPress={() =>
               router.push({
                 pathname: '/expense/[id]',
@@ -64,13 +74,15 @@ export default function CategoryView() {
               })
             }
           >
-            <View style={{ flex: 1 }}>
+            <View style={{ flex: 1, marginRight: 12 }}>
               <Text style={styles.itemTitle} numberOfLines={1}>
                 {item.title}
               </Text>
-              <Text style={styles.itemDate}>{formatDate(item.date)}</Text>
+              <Text style={styles.itemDate} numberOfLines={1}>
+                {formatDate(item.date)}
+              </Text>
             </View>
-            <Text style={styles.itemAmount}>
+            <Text style={[styles.itemAmount, moneyTextStyle]}>
               {formatMoney(item.amount, item.currency)}
             </Text>
           </Pressable>
