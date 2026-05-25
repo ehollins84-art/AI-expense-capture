@@ -18,6 +18,7 @@ import {
   newId,
   deleteExpense as deleteExpenseFs,
   updateExpense as updateExpenseFs,
+  deleteProjectAndExpenses,
 } from './storage';
 import {
   getStoredIteration,
@@ -48,6 +49,8 @@ type StoreCtx = StoreState & {
     scheme: Project['scheme'],
     customCategories?: string[],
   ) => Promise<Project>;
+  updateProject: (project: Project) => Promise<Project>;
+  removeProject: (project: Project) => Promise<void>;
   saveExpenseAndSync: (
     expense: Omit<Expense, 'id' | 'createdAt' | 'imageFilename'>,
     imageUri: string,
@@ -152,6 +155,47 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     [projects, iteration, setActiveProject],
   );
 
+  const updateProject = useCallback(
+    async (next: Project): Promise<Project> => {
+      const trimmedName = next.name.trim();
+      if (!trimmedName) {
+        throw new Error('Project name can\'t be empty.');
+      }
+      const clash = projects.find(
+        (p) =>
+          p.id !== next.id &&
+          p.name.toLowerCase() === trimmedName.toLowerCase(),
+      );
+      if (clash) {
+        throw new Error(`Another project is already named "${trimmedName}".`);
+      }
+      const updated: Project = { ...next, name: trimmedName };
+      const list = projects.map((p) => (p.id === updated.id ? updated : p));
+      await writeProjects(iteration, list);
+      setProjects(list);
+
+      if (await isConnected()) {
+        uploadProjectManifest(iteration, updated).catch((err) =>
+          console.warn('Project manifest upload failed:', err),
+        );
+      }
+      return updated;
+    },
+    [projects, iteration],
+  );
+
+  const removeProject = useCallback(
+    async (project: Project) => {
+      await deleteProjectAndExpenses(iteration, project.id);
+      setProjects((prev) => prev.filter((p) => p.id !== project.id));
+      setExpenses((prev) => prev.filter((e) => e.projectId !== project.id));
+      if (activeProjectId === project.id) {
+        setActiveProject(null);
+      }
+    },
+    [iteration, activeProjectId, setActiveProject],
+  );
+
   const saveExpenseAndSync = useCallback(
     async (
       input: Omit<Expense, 'id' | 'createdAt' | 'imageFilename'>,
@@ -245,6 +289,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       setIteration,
       setActiveProject,
       addProject,
+      updateProject,
+      removeProject,
       saveExpenseAndSync,
       updateExpense,
       removeExpense,
@@ -260,6 +306,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       setIteration,
       setActiveProject,
       addProject,
+      updateProject,
+      removeProject,
       saveExpenseAndSync,
       updateExpense,
       removeExpense,

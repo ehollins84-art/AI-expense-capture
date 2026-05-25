@@ -38,6 +38,14 @@ export default function RootLayout() {
               }}
             />
             <Stack.Screen
+              name="projects/[id]"
+              options={{
+                presentation: 'modal',
+                animation: 'slide_from_bottom',
+                gestureEnabled: true,
+              }}
+            />
+            <Stack.Screen
               name="settings"
               options={{
                 presentation: 'modal',

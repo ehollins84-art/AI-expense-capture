@@ -5,6 +5,7 @@ export type Project = {
   name: string;
   scheme: CategoryScheme;
   customCategories?: string[];
+  additionalCategories?: string[];
   createdAt: string;
 };
 

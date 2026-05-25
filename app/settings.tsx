@@ -378,10 +378,26 @@ export default function Settings() {
             </Card>
           ) : (
             projects.map((p) => (
-              <Card key={p.id}>
-                <Text style={styles.label}>{p.name}</Text>
-                <Text style={styles.value}>{labelForScheme(p.scheme)}</Text>
-              </Card>
+              <Pressable
+                key={p.id}
+                style={styles.projectCard}
+                hapticOnPress="select"
+                scaleTo={0.98}
+                onPress={() =>
+                  router.push({
+                    pathname: '/projects/[id]',
+                    params: { id: p.id },
+                  })
+                }
+              >
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.projectName} numberOfLines={1}>
+                    {p.name}
+                  </Text>
+                  <Text style={styles.projectMeta}>{labelForScheme(p.scheme)}</Text>
+                </View>
+                <Text style={styles.projectChevron}>›</Text>
+              </Pressable>
             ))
           )}
           <Pressable
@@ -531,6 +547,31 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.border,
     padding: theme.spacing.md,
     marginBottom: theme.spacing.sm,
+  },
+  projectCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radius.lg,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.md,
+    marginBottom: theme.spacing.sm,
+  },
+  projectName: {
+    ...theme.type.bodyStrong,
+    color: theme.colors.text,
+  },
+  projectMeta: {
+    ...theme.type.label,
+    color: theme.colors.textMuted,
+    marginTop: 4,
+  },
+  projectChevron: {
+    fontSize: 24,
+    color: theme.colors.textSubtle,
+    marginLeft: theme.spacing.sm,
   },
   label: { ...theme.type.label, color: theme.colors.textMuted, marginBottom: 4 },
   value: { ...theme.type.body, color: theme.colors.text },

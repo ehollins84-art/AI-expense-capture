@@ -35,7 +35,7 @@ export const SCHEDULE_C_CATEGORIES = [
   'Other',
 ];
 
-export function categoriesForProject(project: Project): string[] {
+export function baseCategoriesForProject(project: Project): string[] {
   switch (project.scheme) {
     case 'schedule_e':
       return SCHEDULE_E_CATEGORIES;
@@ -46,6 +46,21 @@ export function categoriesForProject(project: Project): string[] {
         ? project.customCategories
         : ['Other'];
   }
+}
+
+export function categoriesForProject(project: Project): string[] {
+  const base = baseCategoriesForProject(project);
+  const extras = project.additionalCategories ?? [];
+  const seen = new Set(base.map((c) => c.toLowerCase()));
+  const merged = [...base];
+  for (const extra of extras) {
+    const key = extra.toLowerCase();
+    if (!seen.has(key)) {
+      seen.add(key);
+      merged.push(extra);
+    }
+  }
+  return merged;
 }
 
 export function labelForScheme(scheme: CategoryScheme): string {

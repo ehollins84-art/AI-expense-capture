@@ -226,6 +226,28 @@ export async function updateExpense(
   return newExpense;
 }
 
+export async function deleteProjectAndExpenses(
+  letter: string,
+  projectId: string,
+): Promise<void> {
+  const projectFolder = `${iterationDir(letter)}${projectId}/`;
+  try {
+    await FileSystem.deleteAsync(projectFolder, { idempotent: true });
+  } catch {
+    /* ignore */
+  }
+  const projects = await readProjects(letter);
+  await writeProjects(
+    letter,
+    projects.filter((p) => p.id !== projectId),
+  );
+  const expenses = await readExpenses(letter);
+  await writeExpenses(
+    letter,
+    expenses.filter((e) => e.projectId !== projectId),
+  );
+}
+
 /**
  * Idempotent project insert keyed by project.id. Used during Drive import.
  * Existing projects with the same id are left untouched (we trust the local
