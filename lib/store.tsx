@@ -21,9 +21,15 @@ import {
 } from './storage';
 import {
   getStoredIteration,
-  getStoredToken,
+  isConnected,
   setStoredIteration,
+  syncExpenseEdit,
   uploadExpenseToDrive,
+  uploadProjectManifest,
+  deleteExpenseFromDrive,
+  importIteration as importIterationDrive,
+  type ImportProgress,
+  type ImportResult,
 } from './drive';
 
 type StoreState = {
@@ -49,6 +55,10 @@ type StoreCtx = StoreState & {
   updateExpense: (expense: Expense) => Promise<Expense>;
   removeExpense: (expense: Expense) => Promise<void>;
   refresh: () => Promise<void>;
+  importFromDrive: (
+    iter: string,
+    onProgress: (p: ImportProgress) => void,
+  ) => Promise<ImportResult>;
 };
 
 const ACTIVE_PROJECT_KEY = 'activeProjectId';
@@ -114,18 +124,29 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       scheme: Project['scheme'],
       customCategories?: string[],
     ): Promise<Project> => {
+      const trimmed = name.trim();
+      if (projects.some((p) => p.name.toLowerCase() === trimmed.toLowerCase())) {
+        throw new Error(
+          `A project named "${trimmed}" already exists in iteration ${iteration}.`,
+        );
+      }
       const project: Project = {
         id: newId(),
-        name: name.trim(),
+        name: trimmed,
         scheme,
-        customCategories:
-          scheme === 'custom' ? customCategories : undefined,
+        customCategories: scheme === 'custom' ? customCategories : undefined,
         createdAt: new Date().toISOString(),
       };
       const next = [...projects, project];
       await writeProjects(iteration, next);
       setProjects(next);
       setActiveProject(project.id);
+
+      if (await isConnected()) {
+        uploadProjectManifest(iteration, project).catch((err) =>
+          console.warn('Project manifest upload failed:', err),
+        );
+      }
       return project;
     },
     [projects, iteration, setActiveProject],
@@ -145,15 +166,11 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       const stored = await saveExpense(iteration, expense, imageUri);
       setExpenses((prev) => [...prev, stored]);
 
-      // Background Drive sync — best-effort.
-      const token = await getStoredToken();
-      if (token) {
-        const proj = projects.find((p) => p.id === stored.projectId);
-        if (proj) {
-          uploadExpenseToDrive(token, iteration, proj.name, stored, imageUri).catch(
-            (err) => console.warn('Drive sync failed:', err),
-          );
-        }
+      const proj = projects.find((p) => p.id === stored.projectId);
+      if (proj && (await isConnected())) {
+        uploadExpenseToDrive(iteration, proj, stored, imageUri).catch((err) =>
+          console.warn('Drive sync failed:', err),
+        );
       }
       return stored;
     },
@@ -164,8 +181,15 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     async (expense: Expense) => {
       await deleteExpenseFs(iteration, expense);
       setExpenses((prev) => prev.filter((e) => e.id !== expense.id));
+
+      const proj = projects.find((p) => p.id === expense.projectId);
+      if (proj && (await isConnected())) {
+        deleteExpenseFromDrive(iteration, proj, expense).catch((err) =>
+          console.warn('Drive delete failed:', err),
+        );
+      }
     },
-    [iteration],
+    [iteration, projects],
   );
 
   const updateExpense = useCallback(
@@ -176,9 +200,39 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       setExpenses((prev) =>
         prev.map((e) => (e.id === stored.id ? stored : e)),
       );
+
+      const proj = projects.find((p) => p.id === stored.projectId);
+      if (proj && (await isConnected())) {
+        // The local image lives at the new folder path post-update.
+        const fs = await import('./storage');
+        const imageUri = await fs.imagePathForExpense(iteration, stored);
+        syncExpenseEdit(iteration, proj, old, stored, imageUri).catch((err) =>
+          console.warn('Drive edit sync failed:', err),
+        );
+      }
       return stored;
     },
-    [expenses, iteration],
+    [expenses, projects, iteration],
+  );
+
+  const importFromDrive = useCallback(
+    async (
+      iter: string,
+      onProgress: (p: ImportProgress) => void,
+    ): Promise<ImportResult> => {
+      const existingProjectIds = new Set(projects.map((p) => p.id));
+      const existingExpenseIds = new Set(expenses.map((e) => e.id));
+      const result = await importIterationDrive(
+        iter,
+        existingProjectIds,
+        existingExpenseIds,
+        onProgress,
+      );
+      // Reload from disk so in-memory state matches what was just written.
+      await loadForIteration(iter);
+      return result;
+    },
+    [projects, expenses, loadForIteration],
   );
 
   const value = useMemo<StoreCtx>(
@@ -195,6 +249,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       updateExpense,
       removeExpense,
       refresh,
+      importFromDrive,
     }),
     [
       iteration,
@@ -209,6 +264,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       updateExpense,
       removeExpense,
       refresh,
+      importFromDrive,
     ],
   );
 

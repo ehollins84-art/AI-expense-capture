@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
+  Modal,
   ScrollView,
   StyleSheet,
   Text,
@@ -16,13 +18,15 @@ import { useStore } from '../lib/store';
 import { theme } from '../lib/theme';
 import { labelForScheme } from '../lib/categories';
 import {
+  checkConcurrentDevice,
   clearAuth,
   fetchUserEmail,
   getStoredEmail,
-  getStoredToken,
+  isConnected,
   listRemoteIterations,
   saveAuth,
   setStoredIteration,
+  type ImportProgress,
 } from '../lib/drive';
 import { listIterations, nextIterationLetter } from '../lib/storage';
 import { claudeConfigured } from '../lib/claude';
@@ -37,13 +41,18 @@ const GOOGLE_CLIENT_ID =
 const discovery = {
   authorizationEndpoint: 'https://accounts.google.com/o/oauth2/v2/auth',
   tokenEndpoint: 'https://oauth2.googleapis.com/token',
+  revocationEndpoint: 'https://oauth2.googleapis.com/revoke',
 };
 
 export default function Settings() {
   const router = useRouter();
-  const { iteration, setIteration, projects, refresh } = useStore();
+  const { iteration, setIteration, projects, importFromDrive, refresh } =
+    useStore();
   const [driveEmail, setDriveEmail] = useState<string | null>(null);
   const [connecting, setConnecting] = useState(false);
+  const [importProgress, setImportProgress] = useState<ImportProgress | null>(
+    null,
+  );
 
   const redirectUri = AuthSession.makeRedirectUri({
     scheme: 'scheduleeai',
@@ -58,7 +67,12 @@ export default function Settings() {
         'https://www.googleapis.com/auth/userinfo.email',
       ],
       redirectUri,
-      responseType: AuthSession.ResponseType.Token,
+      responseType: AuthSession.ResponseType.Code,
+      usePKCE: true,
+      extraParams: {
+        access_type: 'offline',
+        prompt: 'consent',
+      },
     },
     discovery,
   );
@@ -68,40 +82,79 @@ export default function Settings() {
   }, []);
 
   useEffect(() => {
-    if (response?.type === 'success' && response.authentication?.accessToken) {
-      const token = response.authentication.accessToken;
-      (async () => {
-        const email = (await fetchUserEmail(token)) ?? undefined;
-        await saveAuth(token, email);
-        setDriveEmail(email ?? null);
-        await maybeOfferImport(token);
-      })();
-    } else if (response?.type === 'error') {
-      Alert.alert(
-        'Sign-in failed',
-        response.error?.message ?? 'Unknown error',
-      );
+    if (!response) return;
+    if (response.type === 'error') {
+      Alert.alert('Sign-in failed', response.error?.message ?? 'Unknown error');
+      setConnecting(false);
+      return;
     }
-    setConnecting(false);
+    if (response.type !== 'success' || !response.params.code) {
+      setConnecting(false);
+      return;
+    }
+    if (!request?.codeVerifier) {
+      Alert.alert('Sign-in failed', 'Missing PKCE verifier.');
+      setConnecting(false);
+      return;
+    }
+    (async () => {
+      try {
+        const tokenResult = await AuthSession.exchangeCodeAsync(
+          {
+            clientId: GOOGLE_CLIENT_ID,
+            code: response.params.code,
+            redirectUri,
+            extraParams: { code_verifier: request.codeVerifier as string },
+          },
+          discovery,
+        );
+        await saveAuth({
+          accessToken: tokenResult.accessToken,
+          refreshToken: tokenResult.refreshToken ?? null,
+          expiresInSeconds: tokenResult.expiresIn ?? 3600,
+        });
+        const email = (await fetchUserEmail(tokenResult.accessToken)) ?? undefined;
+        if (email) await saveAuth(
+          {
+            accessToken: tokenResult.accessToken,
+            refreshToken: tokenResult.refreshToken ?? null,
+            expiresInSeconds: tokenResult.expiresIn ?? 3600,
+          },
+          email,
+        );
+        setDriveEmail(email ?? null);
+        await maybeOfferImport();
+      } catch (e) {
+        Alert.alert(
+          'Sign-in failed',
+          e instanceof Error ? e.message : String(e),
+        );
+      } finally {
+        setConnecting(false);
+      }
+    })();
   }, [response]);
 
-  async function maybeOfferImport(token: string) {
-    const remote = await listRemoteIterations(token);
+  async function maybeOfferImport() {
+    const remote = await listRemoteIterations();
     const local = await listIterations();
     const localHasData = local.length > 0;
     const remoteHasData = remote.length > 0;
+    if (!remoteHasData) return;
 
-    if (remoteHasData && !localHasData) {
+    if (!localHasData) {
+      const latest = remote[remote.length - 1];
+      const warning = await checkConcurrentDevice(latest);
+      const concurrentNote = warning
+        ? `\n\nNote: another device wrote to iteration ${latest} ${formatAge(warning.ageMs)} ago. Avoid editing on both devices.`
+        : '';
       Alert.alert(
-        'Existing data found',
-        `We found iteration${remote.length > 1 ? 's' : ''} ${remote.join(', ')} in your Drive. We'll keep using "${remote[0]}".`,
+        'Restore from Drive?',
+        `Iteration${remote.length > 1 ? 's' : ''} ${remote.join(', ')} found in your Drive.${concurrentNote}`,
         [
           {
-            text: 'OK',
-            onPress: async () => {
-              await setIteration(remote[0]);
-              await setStoredIteration(remote[0]);
-            },
+            text: 'Import latest',
+            onPress: () => runImport(latest),
           },
           {
             text: 'Start fresh',
@@ -109,7 +162,9 @@ export default function Settings() {
             onPress: async () => {
               const next = await nextIterationLetter();
               const start = remote.includes(next)
-                ? String.fromCharCode(remote[remote.length - 1].charCodeAt(0) + 1)
+                ? String.fromCharCode(
+                    remote[remote.length - 1].charCodeAt(0) + 1,
+                  )
                 : next;
               await setIteration(start);
               await setStoredIteration(start);
@@ -117,6 +172,33 @@ export default function Settings() {
           },
         ],
       );
+    }
+  }
+
+  async function runImport(iter: string) {
+    await setStoredIteration(iter);
+    await setIteration(iter);
+    setImportProgress({
+      phase: 'discovering',
+      current: 0,
+      total: 0,
+      message: 'Starting…',
+    });
+    try {
+      const result = await importFromDrive(iter, setImportProgress);
+      await refresh();
+      const detail =
+        `Imported ${result.projects.length} project${result.projects.length === 1 ? '' : 's'}` +
+        ` and ${result.expenses.length} expense${result.expenses.length === 1 ? '' : 's'}.` +
+        (result.skipped ? ` Skipped ${result.skipped} already present.` : '') +
+        (result.lossy.length
+          ? `\n\nIssues:\n${result.lossy.slice(0, 6).join('\n')}${result.lossy.length > 6 ? `\n…and ${result.lossy.length - 6} more.` : ''}`
+          : '');
+      Alert.alert('Import complete', detail);
+    } catch (e) {
+      Alert.alert('Import failed', e instanceof Error ? e.message : String(e));
+    } finally {
+      setImportProgress(null);
     }
   }
 
@@ -150,6 +232,29 @@ export default function Settings() {
     );
   }
 
+  async function handleManualImport() {
+    if (!(await isConnected())) {
+      Alert.alert('Not connected', 'Connect Google Drive first.');
+      return;
+    }
+    const remote = await listRemoteIterations();
+    if (remote.length === 0) {
+      Alert.alert('Nothing on Drive', 'No iterations found in your Drive.');
+      return;
+    }
+    Alert.alert(
+      'Import from Drive',
+      `Found iteration${remote.length > 1 ? 's' : ''} ${remote.join(', ')}. Importing merges anything new into your local data.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        ...remote.map((it) => ({
+          text: `Import ${it}`,
+          onPress: () => runImport(it),
+        })),
+      ],
+    );
+  }
+
   return (
     <Screen>
       <View style={styles.topBar}>
@@ -169,6 +274,12 @@ export default function Settings() {
                 <Text style={styles.value}>{driveEmail}</Text>
                 <Pressable
                   style={[styles.btn, styles.btnGhost]}
+                  onPress={handleManualImport}
+                >
+                  <Text style={styles.btnGhostText}>Import from Drive</Text>
+                </Pressable>
+                <Pressable
+                  style={[styles.btn, styles.btnGhost]}
                   onPress={handleDisconnect}
                 >
                   <Text style={styles.btnGhostText}>Disconnect</Text>
@@ -178,7 +289,8 @@ export default function Settings() {
               <>
                 <Text style={styles.label}>Google Drive</Text>
                 <Text style={styles.value}>
-                  Back up your receipts and metadata to your own Drive.
+                  Back up your receipts and metadata to your own Drive. Sign in
+                  once and we'll keep everything in sync.
                 </Text>
                 <Pressable
                   style={[styles.btn, styles.btnPrimary]}
@@ -199,9 +311,9 @@ export default function Settings() {
             <Text style={styles.label}>Current</Text>
             <Text style={styles.iteration}>{iteration}</Text>
             <Text style={styles.hint}>
-              All your data is stored under iteration {iteration}. If you ever
-              move to a new device and don't want to import, a fresh iteration
-              letter is created automatically.
+              All your data is stored under iteration {iteration}. On a new
+              device, connect Drive and choose Import to bring it back; choose
+              Start fresh to create a new iteration letter instead.
             </Text>
           </Card>
         </Section>
@@ -251,8 +363,46 @@ export default function Settings() {
 
         <View style={{ height: theme.spacing.xxl }} />
       </ScrollView>
+
+      <Modal
+        visible={importProgress !== null}
+        transparent
+        animationType="fade"
+      >
+        <View style={styles.modalScrim}>
+          <View style={styles.modalCard}>
+            <ActivityIndicator color={theme.colors.accent} />
+            <Text style={styles.modalTitle}>
+              {importProgress?.phase === 'projects'
+                ? 'Importing projects'
+                : importProgress?.phase === 'expenses'
+                  ? 'Importing expenses'
+                  : importProgress?.phase === 'done'
+                    ? 'Wrapping up'
+                    : 'Scanning Drive'}
+            </Text>
+            <Text style={styles.modalDetail} numberOfLines={2}>
+              {importProgress?.message ?? ''}
+            </Text>
+            {importProgress && importProgress.total > 0 && (
+              <Text style={styles.modalCount}>
+                {importProgress.current} / {importProgress.total}
+              </Text>
+            )}
+          </View>
+        </View>
+      </Modal>
     </Screen>
   );
+}
+
+function formatAge(ms: number): string {
+  const minutes = Math.round(ms / 60000);
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours}h`;
+  const days = Math.round(hours / 24);
+  return `${days}d`;
 }
 
 function Section({
@@ -303,10 +453,7 @@ const styles = StyleSheet.create({
   },
   label: { ...theme.type.label, color: theme.colors.textMuted, marginBottom: 4 },
   value: { ...theme.type.body, color: theme.colors.text },
-  iteration: {
-    ...theme.type.display,
-    color: theme.colors.text,
-  },
+  iteration: { ...theme.type.display, color: theme.colors.text },
   hint: {
     ...theme.type.label,
     color: theme.colors.textMuted,
@@ -327,4 +474,34 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.border,
   },
   btnGhostText: { color: theme.colors.text, ...theme.type.bodyStrong },
+  modalScrim: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: theme.spacing.lg,
+  },
+  modalCard: {
+    width: '100%',
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radius.lg,
+    padding: theme.spacing.lg,
+    alignItems: 'center',
+  },
+  modalTitle: {
+    ...theme.type.bodyStrong,
+    color: theme.colors.text,
+    marginTop: theme.spacing.md,
+  },
+  modalDetail: {
+    ...theme.type.body,
+    color: theme.colors.textMuted,
+    marginTop: 6,
+    textAlign: 'center',
+  },
+  modalCount: {
+    ...theme.type.label,
+    color: theme.colors.textSubtle,
+    marginTop: 4,
+  },
 });

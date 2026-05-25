@@ -4,7 +4,7 @@ import type { Expense, Iteration, Project } from './types';
 
 const ROOT = FileSystem.documentDirectory + 'schedule-e-ai/';
 
-async function ensureDir(path: string) {
+export async function ensureDir(path: string) {
   const info = await FileSystem.getInfoAsync(path);
   if (!info.exists) {
     await FileSystem.makeDirectoryAsync(path, { intermediates: true });
@@ -13,6 +13,10 @@ async function ensureDir(path: string) {
 
 function iterationDir(letter: string) {
   return `${ROOT}${letter}/`;
+}
+
+export function iterationRootPath(letter: string): string {
+  return iterationDir(letter);
 }
 
 function projectDir(letter: string, projectId: string) {
@@ -35,6 +39,11 @@ function expenseFolderName(expense: Expense): string {
   const dateStr = expense.date.replaceAll('-', '.');
   const safeTitle = expense.title.replace(/[/\\:*?"<>|]/g, '').trim();
   return `${dateStr} ${safeTitle}`;
+}
+
+export function expenseFolderPath(letter: string, expense: Expense): string {
+  const year = new Date(expense.date).getFullYear();
+  return `${yearDir(letter, expense.projectId, year)}${expenseFolderName(expense)}/`;
 }
 
 export function newId(): string {
@@ -215,4 +224,51 @@ export async function updateExpense(
     all.map((e) => (e.id === newExpense.id ? newExpense : e)),
   );
   return newExpense;
+}
+
+/**
+ * Idempotent project insert keyed by project.id. Used during Drive import.
+ * Existing projects with the same id are left untouched (we trust the local
+ * copy on conflict). The function returns whether a new row was added.
+ */
+export async function upsertImportedProject(
+  letter: string,
+  project: Project,
+): Promise<boolean> {
+  const all = await readProjects(letter);
+  if (all.some((p) => p.id === project.id)) return false;
+  await writeProjects(letter, [...all, project]);
+  return true;
+}
+
+/**
+ * Idempotent expense insert keyed by expense.id. Writes the metadata files
+ * for the expense (the image is expected to already be on disk at the
+ * canonical path). Append-only on the index; existing ids are skipped.
+ */
+export async function importExpenseFromMetadata(
+  letter: string,
+  expense: Expense,
+): Promise<boolean> {
+  const folder = expenseFolderPath(letter, expense);
+  await ensureDir(folder);
+  const metaText = [
+    `Title: ${expense.title}`,
+    `Date: ${expense.date}`,
+    `Category: ${expense.category}`,
+    `Amount: ${expense.currency} ${expense.amount.toFixed(2)}`,
+    expense.notes ? `Notes: ${expense.notes}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
+  await FileSystem.writeAsStringAsync(`${folder}metadata.txt`, metaText);
+  await FileSystem.writeAsStringAsync(
+    `${folder}metadata.json`,
+    JSON.stringify(expense, null, 2),
+  );
+
+  const all = await readExpenses(letter);
+  if (all.some((e) => e.id === expense.id)) return false;
+  await writeExpenses(letter, [...all, expense]);
+  return true;
 }
