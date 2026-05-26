@@ -9,12 +9,20 @@ import {
 import { Image } from 'expo-image';
 import { theme } from '../lib/theme';
 
+// Steps progress through ONCE — they don't loop. Step 5 ("Almost there…") is
+// the indefinite hold state when extraction takes longer than the scripted
+// runtime, instead of cycling back to step 0 (which broke the illusion).
 const STEPS = [
+  'Sending photo to AI…',
   'Reading the receipt…',
   'Finding the merchant…',
   'Pulling the total…',
   'Picking a category…',
+  'Almost there…',
 ];
+const STEP_DURATIONS = [1200, 1300, 1300, 1300, 1300]; // ms per scripted step
+const HOLD_STEP = STEPS.length - 1;
+const DOT_COUNT = STEPS.length - 1; // 5 dots; the hold state doesn't get a dot
 
 export function ExtractingState({ imageUri }: { imageUri: string | null }) {
   const sweep = useRef(new Animated.Value(0)).current;
@@ -30,29 +38,33 @@ export function ExtractingState({ imageUri }: { imageUri: string | null }) {
         useNativeDriver: true,
       }),
     ).start();
+  }, []);
 
-    const id = setInterval(() => {
+  useEffect(() => {
+    if (stepIndex >= HOLD_STEP) return; // hold indefinitely
+    const t = setTimeout(() => {
       Animated.timing(fade, {
         toValue: 0,
         duration: 180,
         useNativeDriver: true,
       }).start(() => {
-        setStepIndex((i) => (i + 1) % STEPS.length);
+        setStepIndex((i) => Math.min(i + 1, HOLD_STEP));
         Animated.timing(fade, {
           toValue: 1,
           duration: 220,
           useNativeDriver: true,
         }).start();
       });
-    }, 1500);
-
-    return () => clearInterval(id);
-  }, []);
+    }, STEP_DURATIONS[stepIndex] ?? 1300);
+    return () => clearTimeout(t);
+  }, [stepIndex]);
 
   const sweepY = sweep.interpolate({
     inputRange: [0, 1],
     outputRange: [-12, 280],
   });
+
+  const isHold = stepIndex >= HOLD_STEP;
 
   return (
     <View style={styles.wrap}>
@@ -79,15 +91,27 @@ export function ExtractingState({ imageUri }: { imageUri: string | null }) {
       </Animated.Text>
 
       <View style={styles.dots}>
-        {STEPS.map((_, i) => (
-          <View
-            key={i}
-            style={[
-              styles.dot,
-              i === stepIndex && styles.dotActive,
-            ]}
-          />
-        ))}
+        {Array.from({ length: DOT_COUNT }, (_, i) => {
+          // While scripted, the current dot is active (wide); earlier dots are
+          // completed (filled narrow); later dots are upcoming (grey).
+          // While holding, every dot shows as completed.
+          let state: 'completed' | 'active' | 'upcoming';
+          if (isHold) state = 'completed';
+          else if (i < stepIndex) state = 'completed';
+          else if (i === stepIndex) state = 'active';
+          else state = 'upcoming';
+
+          return (
+            <View
+              key={i}
+              style={[
+                styles.dot,
+                state === 'active' && styles.dotActive,
+                state === 'completed' && styles.dotCompleted,
+              ]}
+            />
+          );
+        })}
       </View>
     </View>
   );
@@ -180,6 +204,9 @@ const styles = StyleSheet.create({
     height: 6,
     borderRadius: 3,
     backgroundColor: theme.colors.border,
+  },
+  dotCompleted: {
+    backgroundColor: theme.colors.accent,
   },
   dotActive: {
     backgroundColor: theme.colors.accent,
