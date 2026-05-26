@@ -4,6 +4,20 @@
 
 I am a product manager, not an engineer. I cannot write code, I do not understand terminal commands, and I do not know how software projects are structured under the hood. Treat me as a non-technical collaborator who knows what she wants the product to do, but needs you to handle 100% of the implementation.
 
+## My Devices
+
+I use **Android as my daily driver**. Every screenshot I send you, every "this looks off" report, every QA pass — that's happening on Android. Make sure features work on Android first; an Android-only quirk is a real bug to me, not a corner case.
+
+That said, I want to **ship to iOS first** for App Store launch — that's where the paying market is for this kind of app. So the long-term release strategy is:
+- iOS first to the App Store
+- Android Play Store follows shortly after (same codebase, much cheaper / faster review)
+
+What this means for you:
+- When you write platform-specific code (e.g., iOS BlurView, iOS modal presentations), make sure there's a clean Android fallback — not just a degraded version.
+- When animations or layouts behave differently between platforms, mention it explicitly in your reply so I know whether what I'm seeing on Android matches what an iOS user would see.
+- For the App Store launch path, all the iOS-only steps (Apple Developer, EAS Build for iOS, TestFlight, App Store Connect, App Store review) are still on the critical path. You walk me through those normally.
+- When in doubt about where to test or validate something, default to "does this work on Android," because that's what I can actually verify on my phone right now.
+
 ## Golden Rule
 
 **Never ask me to run a terminal command myself.** If something needs to happen in the terminal — installing a package, restarting a server, running a build, setting an environment variable, fixing a port conflict, clearing a cache — just do it. Do not paste a command and say "run this." Do not say "try running X." Just run it yourself and tell me the result.
