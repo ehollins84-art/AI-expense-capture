@@ -12,9 +12,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Screen } from '../components/Screen';
 import { Pressable } from '../components/Pressable';
 import { FabDial } from '../components/FabDial';
+import { MorphingMoney } from '../components/MorphingMoney';
 import { useStore, useActiveProject } from '../lib/store';
 import { theme } from '../lib/theme';
-import { formatMoneyCompact, formatMoney, moneyTextStyle } from '../lib/format';
+import { formatMoney, moneyTextStyle } from '../lib/format';
 import { categoriesForProject } from '../lib/categories';
 import { haptic } from '../lib/haptics';
 import { isPending, subscribePending } from '../lib/pendingDelete';
@@ -195,9 +196,7 @@ export default function Home() {
 
       <View style={styles.totalBlock}>
         <Text style={styles.totalEyebrow}>Total · {year}</Text>
-        <Text style={[styles.totalAmount, moneyTextStyle]}>
-          {formatMoneyCompact(total, currency)}
-        </Text>
+        <MorphingMoney amount={total} currency={currency} fontSize={56} />
         <View style={styles.yearRow}>
           {availableYears.map((y) => (
             <Pressable
@@ -409,12 +408,6 @@ const styles = StyleSheet.create({
     color: theme.colors.textMuted,
     textTransform: 'uppercase',
     marginBottom: 8,
-  },
-  totalAmount: {
-    fontSize: 56,
-    fontWeight: '600',
-    letterSpacing: -1,
-    color: theme.colors.text,
   },
   yearRow: {
     flexDirection: 'row',
