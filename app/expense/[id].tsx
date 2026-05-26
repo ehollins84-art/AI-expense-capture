@@ -288,7 +288,6 @@ export default function ExpenseDetail() {
                 <Text style={[styles.amount, moneyTextStyle]}>
                   {formatMoney(expense.amount, expense.currency)}
                 </Text>
-                <Text style={styles.editGlyph}>✎</Text>
               </Animated.View>
             </Pressable>
           )}
@@ -327,7 +326,6 @@ export default function ExpenseDetail() {
                 <Text style={styles.title} numberOfLines={2}>
                   {expense.title}
                 </Text>
-                <Text style={styles.editGlyph}>✎</Text>
               </Animated.View>
             </Pressable>
           )}
@@ -399,7 +397,6 @@ export default function ExpenseDetail() {
                     }}
                   >
                     <Text style={styles.rowValue}>{expense.category}</Text>
-                    <Text style={styles.editGlyphInline}>  ✎</Text>
                   </Animated.View>
                 </Pressable>
               )}
@@ -560,12 +557,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 8,
-  },
-  editGlyph: {
-    fontSize: 16,
-    color: theme.colors.textSubtle,
-    marginLeft: 10,
-    marginTop: -8,
   },
   editGlyphInline: {
     fontSize: 13,
