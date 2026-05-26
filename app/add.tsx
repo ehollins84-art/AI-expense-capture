@@ -17,6 +17,7 @@ import { Screen } from '../components/Screen';
 import { Pressable } from '../components/Pressable';
 import { ExtractingState } from '../components/ExtractingState';
 import { DatePickerModal } from '../components/DatePickerModal';
+import { BlinkingCursor } from '../components/BlinkingCursor';
 import { theme } from '../lib/theme';
 import { useStore, useActiveProject } from '../lib/store';
 import { categoriesForProject } from '../lib/categories';
@@ -27,6 +28,15 @@ import { signalReceiptSaved } from '../lib/uiSignals';
 import type { ExtractedReceipt } from '../lib/types';
 
 type Phase = 'picking' | 'extracting' | 'review' | 'saving';
+type RevealStep = 'title' | 'date' | 'category' | 'amount' | 'done';
+type Reveal = {
+  step: RevealStep;
+  typedTitle: string;
+  typedAmount: string;
+};
+
+const CHAR_MS = 28;
+const STEP_PAUSE_MS = 220;
 
 export default function AddExpense() {
   const router = useRouter();
@@ -43,6 +53,7 @@ export default function AddExpense() {
   const [amount, setAmount] = useState('');
   const [currency, setCurrency] = useState('USD');
   const [datePickerOpen, setDatePickerOpen] = useState(false);
+  const [reveal, setReveal] = useState<Reveal | null>(null);
 
   const pickedRef = useRef(false);
 
@@ -87,6 +98,80 @@ export default function AddExpense() {
     })();
   }, [source, active]);
 
+  useEffect(() => {
+    if (!reveal) return;
+    if (reveal.step === 'title') {
+      if (reveal.typedTitle.length < title.length) {
+        const t = setTimeout(
+          () =>
+            setReveal({
+              ...reveal,
+              typedTitle: title.slice(0, reveal.typedTitle.length + 1),
+            }),
+          CHAR_MS,
+        );
+        return () => clearTimeout(t);
+      }
+      const t = setTimeout(
+        () => setReveal({ ...reveal, step: 'date' }),
+        STEP_PAUSE_MS,
+      );
+      return () => clearTimeout(t);
+    }
+    if (reveal.step === 'date') {
+      const t = setTimeout(
+        () => setReveal({ ...reveal, step: 'category' }),
+        420,
+      );
+      return () => clearTimeout(t);
+    }
+    if (reveal.step === 'category') {
+      const t = setTimeout(
+        () => setReveal({ ...reveal, step: 'amount' }),
+        420,
+      );
+      return () => clearTimeout(t);
+    }
+    if (reveal.step === 'amount') {
+      if (reveal.typedAmount.length < amount.length) {
+        const t = setTimeout(
+          () =>
+            setReveal({
+              ...reveal,
+              typedAmount: amount.slice(0, reveal.typedAmount.length + 1),
+            }),
+          CHAR_MS,
+        );
+        return () => clearTimeout(t);
+      }
+      const t = setTimeout(() => setReveal(null), STEP_PAUSE_MS);
+      return () => clearTimeout(t);
+    }
+  }, [reveal, title, amount]);
+
+  function skipReveal() {
+    if (reveal) {
+      haptic.select();
+      setReveal(null);
+    }
+  }
+
+  // A field is "revealed" if there's no reveal in progress, or if the current
+  // reveal step is at or past that field. During its own step, special
+  // behavior takes over (typing, flash, chip pop).
+  const stepRank: Record<RevealStep, number> = {
+    title: 0,
+    date: 1,
+    category: 2,
+    amount: 3,
+    done: 4,
+  };
+  const at = (s: RevealStep) =>
+    !reveal || stepRank[reveal.step] >= stepRank[s];
+  const dateShown = at('date') ? date : '';
+  const categoryShown = at('category') ? category : '';
+  const amountShown = at('amount') ? amount : '';
+
   async function runExtraction(uri: string) {
     if (!active) {
       setError('No active project. Create one first.');
@@ -114,6 +199,7 @@ export default function AddExpense() {
       );
       setAmount(data.amount.toString());
       setCurrency(data.currency || 'USD');
+      setReveal({ step: 'title', typedTitle: '', typedAmount: '' });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       setError(msg);
@@ -222,11 +308,21 @@ export default function AddExpense() {
             <Pressable style={styles.cancelBtn} onPress={() => router.back()}>
               <Text style={styles.cancelText}>Cancel</Text>
             </Pressable>
-            {projects.length > 1 && active && (
+            {reveal ? (
+              <Pressable
+                onPress={skipReveal}
+                hapticOnPress="select"
+                hitSlop={10}
+                scaleTo={1}
+                style={styles.skipPill}
+              >
+                <Text style={styles.skipPillText}>Skip ›</Text>
+              </Pressable>
+            ) : projects.length > 1 && active ? (
               <Text style={styles.projectTag} numberOfLines={1}>
                 {active.name}
               </Text>
-            )}
+            ) : null}
           </View>
 
           {imageUri ? (
@@ -254,64 +350,102 @@ export default function AddExpense() {
 
           {error && <Text style={styles.errorText}>{error}</Text>}
 
-          <Field
-            label="Title"
-            value={title}
-            onChangeText={setTitle}
-            placeholder="Home Depot - Painting Supplies"
-          />
+          <Text style={styles.fieldLabel}>Title</Text>
+          {reveal && reveal.step === 'title' ? (
+            <View style={[styles.input, styles.typingRow]}>
+              <Text style={styles.typingText} numberOfLines={1}>
+                {reveal.typedTitle}
+              </Text>
+              <BlinkingCursor height={22} />
+            </View>
+          ) : (
+            <TextInput
+              value={title}
+              onChangeText={setTitle}
+              placeholder="Home Depot - Painting Supplies"
+              placeholderTextColor={theme.colors.textSubtle}
+              style={[styles.input, { marginBottom: theme.spacing.md }]}
+              editable={!reveal}
+            />
+          )}
 
           <Text style={styles.fieldLabel}>Date</Text>
           <Pressable
-            style={styles.dateButton}
+            style={[
+              styles.dateButton,
+              reveal?.step === 'date' && styles.dateButtonRevealing,
+            ]}
             hapticOnPress="select"
             scaleTo={1}
+            disabled={!!reveal}
             onPress={() => setDatePickerOpen(true)}
           >
             <Text
               style={[
                 styles.dateButtonText,
-                !date && { color: theme.colors.textSubtle },
+                !dateShown && { color: theme.colors.textSubtle },
               ]}
             >
-              {date ? formatDate(date) : 'Pick a date'}
+              {dateShown ? formatDate(dateShown) : 'Pick a date'}
             </Text>
-            <Text style={styles.dateButtonGlyph}>›</Text>
+            {reveal?.step === 'date' ? (
+              <BlinkingCursor height={20} />
+            ) : (
+              <Text style={styles.dateButtonGlyph}>›</Text>
+            )}
           </Pressable>
 
           <Text style={styles.fieldLabel}>Category</Text>
           <View style={styles.categoryGrid}>
-            {cats.map((c) => (
-              <Pressable
-                key={c}
-                hapticOnPress="select"
-                onPress={() => setCategory(c)}
-                style={[
-                  styles.catChip,
-                  c === category && styles.catChipActive,
-                ]}
-              >
-                <Text
+            {cats.map((c) => {
+              const isActive = c === categoryShown;
+              const isPopping = reveal?.step === 'category' && isActive;
+              return (
+                <Pressable
+                  key={c}
+                  hapticOnPress="select"
+                  disabled={!!reveal}
+                  onPress={() => setCategory(c)}
                   style={[
-                    styles.catChipText,
-                    c === category && styles.catChipTextActive,
+                    styles.catChip,
+                    isActive && styles.catChipActive,
+                    isPopping && styles.catChipPopping,
                   ]}
                 >
-                  {c}
-                </Text>
-              </Pressable>
-            ))}
+                  <Text
+                    style={[
+                      styles.catChipText,
+                      isActive && styles.catChipTextActive,
+                    ]}
+                  >
+                    {c}
+                  </Text>
+                </Pressable>
+              );
+            })}
           </View>
 
           <View style={styles.amountRow}>
             <View style={{ flex: 2 }}>
-              <Field
-                label="Amount"
-                value={amount}
-                onChangeText={setAmount}
-                placeholder="0.00"
-                keyboardType="decimal-pad"
-              />
+              <Text style={styles.fieldLabel}>Amount</Text>
+              {reveal && reveal.step === 'amount' ? (
+                <View style={[styles.input, styles.typingRow]}>
+                  <Text style={styles.typingText} numberOfLines={1}>
+                    {reveal.typedAmount}
+                  </Text>
+                  <BlinkingCursor height={22} />
+                </View>
+              ) : (
+                <TextInput
+                  value={amountShown}
+                  onChangeText={setAmount}
+                  placeholder="0.00"
+                  placeholderTextColor={theme.colors.textSubtle}
+                  keyboardType="decimal-pad"
+                  style={[styles.input, { marginBottom: theme.spacing.md }]}
+                  editable={!reveal}
+                />
+              )}
             </View>
             <View style={{ flex: 1, marginLeft: theme.spacing.md }}>
               <Field
@@ -320,6 +454,7 @@ export default function AddExpense() {
                 onChangeText={setCurrency}
                 placeholder="USD"
                 autoCapitalize="characters"
+                editable={!reveal}
               />
             </View>
           </View>
@@ -341,9 +476,9 @@ export default function AddExpense() {
           <Pressable
             style={[
               styles.lookGoodBtn,
-              phase === 'saving' && { opacity: 0.5 },
+              (phase === 'saving' || !!reveal) && { opacity: 0.4 },
             ]}
-            disabled={phase === 'saving'}
+            disabled={phase === 'saving' || !!reveal}
             hapticOnPress="light"
             onPress={handleSave}
           >
@@ -386,6 +521,27 @@ const styles = StyleSheet.create({
   },
   cancelBtn: { padding: 4 },
   cancelText: { ...theme.type.body, color: theme.colors.textMuted },
+  skipPill: {
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: theme.radius.pill,
+    backgroundColor: theme.colors.surfaceAlt,
+  },
+  skipPillText: {
+    ...theme.type.label,
+    color: theme.colors.textMuted,
+    fontWeight: '600',
+  },
+  typingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: theme.spacing.md,
+  },
+  typingText: {
+    ...theme.type.body,
+    color: theme.colors.text,
+    flexShrink: 1,
+  },
   projectTag: {
     ...theme.type.label,
     color: theme.colors.textMuted,
@@ -467,6 +623,10 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     marginBottom: theme.spacing.md,
   },
+  dateButtonRevealing: {
+    borderColor: theme.colors.accent,
+    backgroundColor: theme.colors.accentSoft,
+  },
   dateButtonText: {
     ...theme.type.body,
     color: theme.colors.text,
@@ -493,6 +653,14 @@ const styles = StyleSheet.create({
   catChipActive: {
     backgroundColor: theme.colors.accent,
     borderColor: theme.colors.accent,
+  },
+  catChipPopping: {
+    transform: [{ scale: 1.08 }],
+    shadowColor: theme.colors.accent,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.45,
+    shadowRadius: 12,
+    elevation: 4,
   },
   catChipText: { ...theme.type.label, color: theme.colors.text },
   catChipTextActive: { color: '#fff' },
