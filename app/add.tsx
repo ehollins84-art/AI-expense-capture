@@ -35,8 +35,9 @@ type Reveal = {
   typedAmount: string;
 };
 
-const CHAR_MS = 28;
-const STEP_PAUSE_MS = 220;
+const CHAR_MS = 10;
+const STEP_PAUSE_MS = 75;
+const STEP_HOLD_MS = 140;
 
 export default function AddExpense() {
   const router = useRouter();
@@ -121,14 +122,14 @@ export default function AddExpense() {
     if (reveal.step === 'date') {
       const t = setTimeout(
         () => setReveal({ ...reveal, step: 'category' }),
-        420,
+        STEP_HOLD_MS,
       );
       return () => clearTimeout(t);
     }
     if (reveal.step === 'category') {
       const t = setTimeout(
         () => setReveal({ ...reveal, step: 'amount' }),
-        420,
+        STEP_HOLD_MS,
       );
       return () => clearTimeout(t);
     }
