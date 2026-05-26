@@ -460,6 +460,7 @@ export default function ExpenseDetail() {
           </View>
 
           <View style={styles.thumbWrap}>
+            <Text style={styles.thumbEyebrow}>RECEIPT</Text>
             {imageUri ? (
               <View style={styles.thumbShadow}>
                 <Pressable
@@ -475,10 +476,6 @@ export default function ExpenseDetail() {
                     style={styles.thumbImage}
                     contentFit="cover"
                   />
-                  <View pointerEvents="none" style={styles.thumb_tl} />
-                  <View pointerEvents="none" style={styles.thumb_tr} />
-                  <View pointerEvents="none" style={styles.thumb_bl} />
-                  <View pointerEvents="none" style={styles.thumb_br} />
                 </Pressable>
               </View>
             ) : (
@@ -659,15 +656,22 @@ const styles = StyleSheet.create({
   catChipTextActive: { color: '#fff' },
   thumbWrap: {
     alignItems: 'center',
-    marginTop: theme.spacing.lg,
+    marginTop: theme.spacing.xl,
     marginBottom: theme.spacing.lg,
+  },
+  thumbEyebrow: {
+    ...theme.type.label,
+    color: theme.colors.textMuted,
+    letterSpacing: 1.2,
+    fontWeight: '600',
+    marginBottom: theme.spacing.md,
   },
   thumbShadow: {
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 10,
-    elevation: 4,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.07,
+    shadowRadius: 6,
+    elevation: 2,
     borderRadius: theme.radius.md,
     backgroundColor: theme.colors.surfaceAlt,
   },
@@ -718,45 +722,5 @@ const styles = StyleSheet.create({
     color: theme.colors.textMuted,
     marginTop: 10,
     letterSpacing: 0.2,
-  },
-  thumb_tl: {
-    position: 'absolute',
-    top: 6,
-    left: 6,
-    width: 12,
-    height: 12,
-    borderTopWidth: 1.5,
-    borderLeftWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.85)',
-  },
-  thumb_tr: {
-    position: 'absolute',
-    top: 6,
-    right: 6,
-    width: 12,
-    height: 12,
-    borderTopWidth: 1.5,
-    borderRightWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.85)',
-  },
-  thumb_bl: {
-    position: 'absolute',
-    bottom: 6,
-    left: 6,
-    width: 12,
-    height: 12,
-    borderBottomWidth: 1.5,
-    borderLeftWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.85)',
-  },
-  thumb_br: {
-    position: 'absolute',
-    bottom: 6,
-    right: 6,
-    width: 12,
-    height: 12,
-    borderBottomWidth: 1.5,
-    borderRightWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.85)',
   },
 });

@@ -2,7 +2,6 @@ import React, { useRef } from 'react';
 import {
   Dimensions,
   Modal,
-  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -89,12 +88,6 @@ export function ReceiptLightbox({
         >
           <Text style={styles.closeText}>Done</Text>
         </Pressable>
-
-        <View style={[styles.hint, { bottom: insets.bottom + 18 }]} pointerEvents="none">
-          <Text style={styles.hintText}>
-            {Platform.OS === 'ios' ? 'Pinch to zoom · double-tap to reset' : 'Pinch to zoom'}
-          </Text>
-        </View>
       </View>
     </Modal>
   );
@@ -117,15 +110,5 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 15,
     fontWeight: '600',
-  },
-  hint: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    alignItems: 'center',
-  },
-  hintText: {
-    color: 'rgba(255,255,255,0.6)',
-    fontSize: 13,
   },
 });
