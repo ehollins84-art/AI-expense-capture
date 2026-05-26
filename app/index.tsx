@@ -420,9 +420,9 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.pill,
     backgroundColor: theme.colors.surfaceAlt,
   },
-  yearChipActive: { backgroundColor: theme.colors.accentSoft },
+  yearChipActive: { backgroundColor: theme.colors.accent },
   yearChipText: { ...theme.type.label, color: theme.colors.textMuted },
-  yearChipTextActive: { color: theme.colors.accent },
+  yearChipTextActive: { color: '#fff', fontWeight: '600' },
   categoryRow: {
     paddingVertical: 16,
   },
