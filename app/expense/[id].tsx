@@ -241,6 +241,44 @@ export default function ExpenseDetail() {
             </Pressable>
           </View>
 
+          <View style={styles.thumbWrap}>
+            {imageUri ? (
+              <Pressable
+                onPress={() => {
+                  haptic.select();
+                  setLightboxOpen(true);
+                }}
+                scaleTo={0.96}
+                style={styles.thumbCard}
+              >
+                <Image
+                  source={{ uri: imageUri }}
+                  style={styles.thumbImage}
+                  contentFit="cover"
+                />
+                <View pointerEvents="none" style={styles.thumb_tl} />
+                <View pointerEvents="none" style={styles.thumb_tr} />
+                <View pointerEvents="none" style={styles.thumb_bl} />
+                <View pointerEvents="none" style={styles.thumb_br} />
+              </Pressable>
+            ) : (
+              <Pressable
+                onPress={offerAttach}
+                hapticOnPress="select"
+                scaleTo={0.96}
+                style={styles.thumbPlaceholder}
+              >
+                <View style={styles.plusGlyph}>
+                  <View style={styles.plusH} />
+                  <View style={styles.plusV} />
+                </View>
+              </Pressable>
+            )}
+            <Text style={styles.thumbCaption}>
+              {imageUri ? 'Tap to view' : 'Add photo'}
+            </Text>
+          </View>
+
           {editing === 'amount' ? (
             <View style={styles.amountEditRow}>
               <TextInput
@@ -458,41 +496,6 @@ export default function ExpenseDetail() {
               </>
             )}
           </View>
-
-          {imageUri ? (
-            <Pressable
-              onPress={() => {
-                haptic.select();
-                setLightboxOpen(true);
-              }}
-              scaleTo={0.98}
-              style={styles.receiptWrap}
-            >
-              <Image
-                source={{ uri: imageUri }}
-                style={styles.receiptImage}
-                contentFit="cover"
-              />
-              <View style={styles.receiptBadge}>
-                <Text style={styles.receiptBadgeText}>Tap to zoom</Text>
-              </View>
-            </Pressable>
-          ) : (
-            <Pressable
-              onPress={offerAttach}
-              hapticOnPress="select"
-              scaleTo={0.98}
-              style={styles.noReceipt}
-            >
-              <View style={styles.noReceiptLines}>
-                <View style={styles.noReceiptLine} />
-                <View style={styles.noReceiptLine} />
-                <View style={[styles.noReceiptLine, { width: '60%' }]} />
-              </View>
-              <Text style={styles.noReceiptTitle}>No receipt photo</Text>
-              <Text style={styles.noReceiptHint}>Tap to attach</Text>
-            </Pressable>
-          )}
         </ScrollView>
       </KeyboardAvoidingView>
 
@@ -652,62 +655,101 @@ const styles = StyleSheet.create({
   },
   catChipText: { ...theme.type.label, color: theme.colors.text },
   catChipTextActive: { color: '#fff' },
-  receiptWrap: {
-    width: '100%',
-    borderRadius: theme.radius.lg,
-    overflow: 'hidden',
+  thumbWrap: {
+    alignItems: 'center',
+    marginBottom: theme.spacing.lg,
   },
-  receiptImage: {
-    width: '100%',
-    aspectRatio: 3 / 4,
-    borderRadius: theme.radius.lg,
+  thumbCard: {
+    width: 112,
+    height: 148,
+    borderRadius: theme.radius.md,
     backgroundColor: theme.colors.surfaceAlt,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 10,
+    elevation: 4,
   },
-  receiptBadge: {
-    position: 'absolute',
-    bottom: 12,
-    right: 12,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: theme.radius.pill,
-    backgroundColor: 'rgba(0,0,0,0.55)',
-  },
-  receiptBadgeText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '600',
-    letterSpacing: 0.3,
-  },
-  noReceipt: {
+  thumbImage: {
     width: '100%',
-    aspectRatio: 16 / 9,
-    borderRadius: theme.radius.lg,
-    backgroundColor: theme.colors.surface,
-    borderWidth: 1,
+    height: '100%',
+  },
+  thumbPlaceholder: {
+    width: 112,
+    height: 148,
+    borderRadius: theme.radius.md,
+    borderWidth: 1.5,
     borderColor: theme.colors.border,
     borderStyle: 'dashed',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: theme.spacing.lg,
+    backgroundColor: theme.colors.surface,
   },
-  noReceiptLines: {
-    width: 38,
-    gap: 4,
-    marginBottom: theme.spacing.md,
+  plusGlyph: {
+    width: 28,
+    height: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  noReceiptLine: {
-    height: 3,
-    borderRadius: 1.5,
+  plusH: {
+    position: 'absolute',
+    width: 22,
+    height: 2,
     backgroundColor: theme.colors.textSubtle,
-    width: '100%',
+    borderRadius: 1,
   },
-  noReceiptTitle: {
-    ...theme.type.bodyStrong,
-    color: theme.colors.text,
+  plusV: {
+    position: 'absolute',
+    width: 2,
+    height: 22,
+    backgroundColor: theme.colors.textSubtle,
+    borderRadius: 1,
   },
-  noReceiptHint: {
+  thumbCaption: {
     ...theme.type.label,
     color: theme.colors.textMuted,
-    marginTop: 4,
+    marginTop: 10,
+    letterSpacing: 0.2,
+  },
+  thumb_tl: {
+    position: 'absolute',
+    top: 6,
+    left: 6,
+    width: 12,
+    height: 12,
+    borderTopWidth: 1.5,
+    borderLeftWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.85)',
+  },
+  thumb_tr: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    width: 12,
+    height: 12,
+    borderTopWidth: 1.5,
+    borderRightWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.85)',
+  },
+  thumb_bl: {
+    position: 'absolute',
+    bottom: 6,
+    left: 6,
+    width: 12,
+    height: 12,
+    borderBottomWidth: 1.5,
+    borderLeftWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.85)',
+  },
+  thumb_br: {
+    position: 'absolute',
+    bottom: 6,
+    right: 6,
+    width: 12,
+    height: 12,
+    borderBottomWidth: 1.5,
+    borderRightWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.85)',
   },
 });
