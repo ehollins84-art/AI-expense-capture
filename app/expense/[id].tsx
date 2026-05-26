@@ -241,94 +241,108 @@ export default function ExpenseDetail() {
             </Pressable>
           </View>
 
-          {editing === 'amount' ? (
-            <View style={styles.amountEditRow}>
-              <TextInput
-                value={draft.amount}
-                onChangeText={(v) => setDraft((d) => ({ ...d, amount: v }))}
-                onBlur={() => commit('amount')}
-                onSubmitEditing={() => commit('amount')}
-                keyboardType="decimal-pad"
-                autoFocus
-                style={[styles.amountInput, moneyTextStyle]}
-                placeholderTextColor={theme.colors.textSubtle}
-                placeholder="0.00"
-              />
-              <TextInput
-                value={draft.currency}
-                onChangeText={(v) => setDraft((d) => ({ ...d, currency: v }))}
-                onBlur={() => commit('amount')}
-                onSubmitEditing={() => commit('amount')}
-                autoCapitalize="characters"
-                maxLength={3}
-                style={styles.currencyInput}
-                placeholderTextColor={theme.colors.textSubtle}
-                placeholder="USD"
-              />
-            </View>
-          ) : (
-            <Pressable
-              onPress={() => {
+          <Pressable
+            onPress={() => {
+              if (editing !== 'amount') {
                 haptic.select();
                 setEditing('amount');
-              }}
-              scaleTo={1}
+              }
+            }}
+            scaleTo={1}
+          >
+            <Animated.View
+              style={[
+                styles.editableWrap,
+                styles.amountRow,
+                {
+                  backgroundColor: flashAnims.amount.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: ['transparent', theme.colors.accentSoft],
+                  }),
+                },
+              ]}
             >
-              <Animated.View
-                style={[
-                  styles.editableWrap,
-                  {
-                    backgroundColor: flashAnims.amount.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: ['transparent', theme.colors.accentSoft],
-                    }),
-                  },
-                ]}
-              >
-                <Text style={[styles.amount, moneyTextStyle]}>
-                  {formatMoney(expense.amount, expense.currency)}
+              <Text style={[styles.amount, moneyTextStyle]}>$</Text>
+              {editing === 'amount' ? (
+                <TextInput
+                  value={draft.amount}
+                  onChangeText={(v) => setDraft((d) => ({ ...d, amount: v }))}
+                  onBlur={() => commit('amount')}
+                  onSubmitEditing={() => commit('amount')}
+                  keyboardType="decimal-pad"
+                  autoFocus
+                  style={[styles.amount, styles.amountField, moneyTextStyle]}
+                  placeholderTextColor={theme.colors.textSubtle}
+                  placeholder="0.00"
+                />
+              ) : (
+                <Text
+                  style={[styles.amount, styles.amountField, moneyTextStyle]}
+                  numberOfLines={1}
+                >
+                  {expense.amount.toFixed(2)}
                 </Text>
-              </Animated.View>
-            </Pressable>
-          )}
+              )}
+              {editing === 'amount' ? (
+                <TextInput
+                  value={draft.currency}
+                  onChangeText={(v) => setDraft((d) => ({ ...d, currency: v }))}
+                  onBlur={() => commit('amount')}
+                  onSubmitEditing={() => commit('amount')}
+                  autoCapitalize="characters"
+                  maxLength={3}
+                  style={styles.currencyField}
+                  placeholderTextColor={theme.colors.textSubtle}
+                  placeholder="USD"
+                />
+              ) : (
+                <Text style={styles.currencyField} numberOfLines={1}>
+                  {expense.currency}
+                </Text>
+              )}
+            </Animated.View>
+          </Pressable>
 
-          {editing === 'title' ? (
-            <TextInput
-              value={draft.title}
-              onChangeText={(v) => setDraft((d) => ({ ...d, title: v }))}
-              onBlur={() => commit('title')}
-              onSubmitEditing={() => commit('title')}
-              autoFocus
-              style={styles.titleInput}
-              placeholderTextColor={theme.colors.textSubtle}
-              placeholder="Title"
-              returnKeyType="done"
-            />
-          ) : (
-            <Pressable
-              onPress={() => {
+          <Pressable
+            onPress={() => {
+              if (editing !== 'title') {
                 haptic.select();
                 setEditing('title');
-              }}
-              scaleTo={1}
+              }
+            }}
+            scaleTo={1}
+          >
+            <Animated.View
+              style={[
+                styles.editableWrap,
+                styles.titleWrap,
+                {
+                  backgroundColor: flashAnims.title.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: ['transparent', theme.colors.accentSoft],
+                  }),
+                },
+              ]}
             >
-              <Animated.View
-                style={[
-                  styles.editableWrap,
-                  {
-                    backgroundColor: flashAnims.title.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: ['transparent', theme.colors.accentSoft],
-                    }),
-                  },
-                ]}
-              >
+              {editing === 'title' ? (
+                <TextInput
+                  value={draft.title}
+                  onChangeText={(v) => setDraft((d) => ({ ...d, title: v }))}
+                  onBlur={() => commit('title')}
+                  onSubmitEditing={() => commit('title')}
+                  autoFocus
+                  style={styles.title}
+                  placeholderTextColor={theme.colors.textSubtle}
+                  placeholder="Title"
+                  returnKeyType="done"
+                />
+              ) : (
                 <Text style={styles.title} numberOfLines={2}>
                   {expense.title}
                 </Text>
-              </Animated.View>
-            </Pressable>
-          )}
+              )}
+            </Animated.View>
+          </Pressable>
 
           <View style={styles.metaCard}>
             <View style={styles.row}>
@@ -563,35 +577,29 @@ const styles = StyleSheet.create({
     color: theme.colors.textSubtle,
   },
   amount: { ...theme.type.display, color: theme.colors.text },
-  amountEditRow: {
+  amountRow: {
     flexDirection: 'row',
     alignItems: 'baseline',
-    gap: 12,
+    alignSelf: 'flex-start',
   },
-  amountInput: {
-    ...theme.type.display,
-    color: theme.colors.text,
-    flex: 1,
+  amountField: {
+    minWidth: 90,
     padding: 0,
   },
-  currencyInput: {
+  currencyField: {
     ...theme.type.title,
     color: theme.colors.textMuted,
-    width: 70,
+    marginLeft: 10,
     padding: 0,
-    textAlign: 'right',
+  },
+  titleWrap: {
+    marginTop: 6,
+    marginBottom: theme.spacing.lg,
+    alignSelf: 'flex-start',
   },
   title: {
     ...theme.type.title,
     color: theme.colors.text,
-    marginTop: 6,
-    marginBottom: theme.spacing.lg,
-  },
-  titleInput: {
-    ...theme.type.title,
-    color: theme.colors.text,
-    marginTop: 6,
-    marginBottom: theme.spacing.lg,
     padding: 0,
   },
   metaCard: {
