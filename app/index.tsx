@@ -11,7 +11,7 @@ import { Link, useRouter, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Screen } from '../components/Screen';
 import { Pressable } from '../components/Pressable';
-import { CameraIcon } from '../components/CameraIcon';
+import { FabDial } from '../components/FabDial';
 import { useStore, useActiveProject } from '../lib/store';
 import { theme } from '../lib/theme';
 import { formatMoneyCompact, formatMoney, moneyTextStyle } from '../lib/format';
@@ -25,7 +25,6 @@ export default function Home() {
   const {
     projects,
     expenses,
-    iteration,
     setActiveProject,
     loading,
     refresh,
@@ -47,11 +46,16 @@ export default function Home() {
 
   const availableYears = useMemo(() => {
     const years = new Set<number>([new Date().getFullYear()]);
-    expenses
-      .filter((e) => !active || e.projectId === active.id)
-      .forEach((e) => years.add(new Date(e.date).getFullYear()));
+    expenses.forEach((e) => years.add(new Date(e.date).getFullYear()));
     return Array.from(years).sort((a, b) => b - a);
-  }, [expenses, active]);
+  }, [expenses]);
+
+  useEffect(() => {
+    if (availableYears.length === 0) return;
+    if (!availableYears.includes(year)) {
+      setYear(availableYears[0]);
+    }
+  }, [availableYears, year]);
 
   const projectExpenses = useMemo(() => {
     if (!active) return [];
@@ -134,15 +138,7 @@ export default function Home() {
   return (
     <Screen>
       <View style={styles.headerRow}>
-        <Pressable
-          style={styles.backupPill}
-          hapticOnPress="select"
-          hitSlop={6}
-          onPress={() => router.push('/settings')}
-        >
-          <View style={styles.backupDot} />
-          <Text style={styles.backupPillText}>Backup {iteration}</Text>
-        </Pressable>
+        <View />
         <Link href="/settings" asChild>
           <Pressable
             style={styles.gear}
@@ -267,24 +263,16 @@ export default function Home() {
         )}
       />
 
-      <Pressable
-        style={[
-          styles.fab,
-          { bottom: Math.max(insets.bottom + 16, 28) },
-        ]}
-        hapticOnPress="medium"
-        scaleTo={0.92}
-        onPress={() => router.push('/add')}
-        onLongPress={() => {
-          haptic.light();
-          router.push({ pathname: '/add', params: { source: 'library' } });
-        }}
-        delayLongPress={300}
-        hitSlop={8}
-      >
-        <CameraIcon size={28} color="#fff" />
-      </Pressable>
-
+      <FabDial
+        bottomInset={insets.bottom}
+        onCamera={() => router.push('/add')}
+        onLibrary={() =>
+          router.push({ pathname: '/add', params: { source: 'library' } })
+        }
+        onManual={() =>
+          router.push({ pathname: '/add', params: { source: 'manual' } })
+        }
+      />
     </Screen>
   );
 }
@@ -352,26 +340,6 @@ const styles = StyleSheet.create({
     paddingBottom: theme.spacing.md,
   },
   appTitle: { ...theme.type.title, color: theme.colors.text },
-  backupPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingLeft: 10,
-    paddingRight: 14,
-    paddingVertical: 6,
-    borderRadius: theme.radius.pill,
-    backgroundColor: theme.colors.surfaceAlt,
-  },
-  backupDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: theme.colors.success,
-    marginRight: 8,
-  },
-  backupPillText: {
-    ...theme.type.label,
-    color: theme.colors.textMuted,
-  },
   gear: {
     width: 40,
     height: 40,
@@ -495,19 +463,4 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   emptySubtitle: { ...theme.type.body, color: theme.colors.textMuted },
-  fab: {
-    position: 'absolute',
-    right: 22,
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: theme.colors.accent,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.18,
-    shadowRadius: 10,
-    elevation: 8,
-  },
 });

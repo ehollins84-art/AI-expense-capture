@@ -50,6 +50,14 @@ export default function AddExpense() {
     if (pickedRef.current) return;
     pickedRef.current = true;
     (async () => {
+      if (source === 'manual') {
+        if (active) {
+          setDate(new Date().toISOString().slice(0, 10));
+          setCategory(categoriesForProject(active)[0] ?? '');
+        }
+        setPhase('review');
+        return;
+      }
       try {
         const fromLibrary = source === 'library';
         const result = fromLibrary
@@ -77,7 +85,7 @@ export default function AddExpense() {
         setPhase('review');
       }
     })();
-  }, [source]);
+  }, [source, active]);
 
   async function runExtraction(uri: string) {
     if (!active) {
@@ -117,7 +125,7 @@ export default function AddExpense() {
   }
 
   async function handleSave() {
-    if (!active || !imageUri) return;
+    if (!active) return;
     const parsedAmount = parseFloat(amount);
     if (!title.trim() || !date.trim() || !category.trim() || isNaN(parsedAmount)) {
       Alert.alert('Missing info', 'Please fill out every field before saving.');
@@ -145,6 +153,39 @@ export default function AddExpense() {
       Alert.alert('Save failed', msg);
       setPhase('review');
     }
+  }
+
+  async function attachPhoto(fromLibrary: boolean) {
+    try {
+      const result = fromLibrary
+        ? await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ['images'],
+            quality: 0.85,
+            allowsEditing: false,
+          })
+        : await ImagePicker.launchCameraAsync({
+            mediaTypes: ['images'],
+            quality: 0.85,
+            allowsEditing: false,
+          });
+      if (result.canceled) return;
+      setImageUri(result.assets[0].uri);
+      haptic.success();
+    } catch (e) {
+      haptic.error();
+      Alert.alert(
+        'Couldn\'t attach photo',
+        e instanceof Error ? e.message : String(e),
+      );
+    }
+  }
+
+  function offerAttachPhoto() {
+    Alert.alert('Attach a photo', undefined, [
+      { text: 'Take photo', onPress: () => attachPhoto(false) },
+      { text: 'Pick from library', onPress: () => attachPhoto(true) },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
   }
 
   if (phase === 'picking') {
@@ -188,12 +229,27 @@ export default function AddExpense() {
             )}
           </View>
 
-          {imageUri && (
+          {imageUri ? (
             <Image
               source={{ uri: imageUri }}
               style={styles.preview}
               contentFit="cover"
             />
+          ) : (
+            <Pressable
+              style={styles.noReceipt}
+              onPress={offerAttachPhoto}
+              hapticOnPress="select"
+              scaleTo={0.98}
+            >
+              <View style={styles.noReceiptIcon}>
+                <View style={styles.noReceiptIconBar} />
+                <View style={styles.noReceiptIconBar} />
+                <View style={[styles.noReceiptIconBar, { width: '60%' }]} />
+              </View>
+              <Text style={styles.noReceiptTitle}>No receipt attached</Text>
+              <Text style={styles.noReceiptHint}>Tap to add a photo</Text>
+            </Pressable>
           )}
 
           {error && <Text style={styles.errorText}>{error}</Text>}
@@ -344,6 +400,39 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.lg,
     backgroundColor: theme.colors.surfaceAlt,
     marginBottom: theme.spacing.lg,
+  },
+  noReceipt: {
+    width: '100%',
+    aspectRatio: 16 / 9,
+    borderRadius: theme.radius.lg,
+    backgroundColor: theme.colors.surface,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderStyle: 'dashed',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: theme.spacing.lg,
+    padding: theme.spacing.lg,
+  },
+  noReceiptIcon: {
+    width: 38,
+    gap: 4,
+    marginBottom: theme.spacing.md,
+  },
+  noReceiptIconBar: {
+    height: 3,
+    borderRadius: 1.5,
+    backgroundColor: theme.colors.textSubtle,
+    width: '100%',
+  },
+  noReceiptTitle: {
+    ...theme.type.bodyStrong,
+    color: theme.colors.text,
+  },
+  noReceiptHint: {
+    ...theme.type.label,
+    color: theme.colors.textMuted,
+    marginTop: 4,
   },
   errorText: {
     ...theme.type.body,

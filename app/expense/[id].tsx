@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
+import * as ImagePicker from 'expo-image-picker';
 import { Screen } from '../../components/Screen';
 import { Pressable } from '../../components/Pressable';
 import { useStore, useActiveProject } from '../../lib/store';
@@ -32,7 +33,7 @@ type EditField = 'amount' | 'title' | 'category' | null;
 export default function ExpenseDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { expenses, iteration, removeExpense, updateExpense, projects } =
+  const { expenses, iteration, removeExpense, updateExpense, attachImage, projects } =
     useStore();
   const expense = expenses.find((e) => e.id === id);
   const [imageUri, setImageUri] = useState<string | null>(null);
@@ -63,9 +64,13 @@ export default function ExpenseDetail() {
 
   useEffect(() => {
     if (!expense) return;
-    imagePathForExpense(iteration, expense).then((p) =>
-      setImageUri(`${p}?t=${Date.now()}`),
-    );
+    if (expense.imageFilename) {
+      imagePathForExpense(iteration, expense).then((p) =>
+        setImageUri(p ? `${p}?t=${Date.now()}` : null),
+      );
+    } else {
+      setImageUri(null);
+    }
     setDraft({
       title: expense.title,
       date: expense.date,
@@ -151,6 +156,42 @@ export default function ExpenseDetail() {
         currency: expense.currency,
       });
     }
+  }
+
+  async function pickAndAttach(fromLibrary: boolean) {
+    if (!expense) return;
+    try {
+      const result = fromLibrary
+        ? await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ['images'],
+            quality: 0.85,
+            allowsEditing: false,
+          })
+        : await ImagePicker.launchCameraAsync({
+            mediaTypes: ['images'],
+            quality: 0.85,
+            allowsEditing: false,
+          });
+      if (result.canceled) return;
+      const stored = await attachImage(expense, result.assets[0].uri);
+      const p = await imagePathForExpense(iteration, stored);
+      setImageUri(p ? `${p}?t=${Date.now()}` : null);
+      haptic.success();
+    } catch (e) {
+      haptic.error();
+      Alert.alert(
+        'Couldn\'t attach photo',
+        e instanceof Error ? e.message : String(e),
+      );
+    }
+  }
+
+  function offerAttach() {
+    Alert.alert('Attach a photo', undefined, [
+      { text: 'Take photo', onPress: () => pickAndAttach(false) },
+      { text: 'Pick from library', onPress: () => pickAndAttach(true) },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
   }
 
   function confirmDelete() {
@@ -418,7 +459,7 @@ export default function ExpenseDetail() {
             )}
           </View>
 
-          {imageUri && (
+          {imageUri ? (
             <Pressable
               onPress={() => {
                 haptic.select();
@@ -435,6 +476,21 @@ export default function ExpenseDetail() {
               <View style={styles.receiptBadge}>
                 <Text style={styles.receiptBadgeText}>Tap to zoom</Text>
               </View>
+            </Pressable>
+          ) : (
+            <Pressable
+              onPress={offerAttach}
+              hapticOnPress="select"
+              scaleTo={0.98}
+              style={styles.noReceipt}
+            >
+              <View style={styles.noReceiptLines}>
+                <View style={styles.noReceiptLine} />
+                <View style={styles.noReceiptLine} />
+                <View style={[styles.noReceiptLine, { width: '60%' }]} />
+              </View>
+              <Text style={styles.noReceiptTitle}>No receipt photo</Text>
+              <Text style={styles.noReceiptHint}>Tap to attach</Text>
             </Pressable>
           )}
         </ScrollView>
@@ -621,5 +677,37 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     letterSpacing: 0.3,
+  },
+  noReceipt: {
+    width: '100%',
+    aspectRatio: 16 / 9,
+    borderRadius: theme.radius.lg,
+    backgroundColor: theme.colors.surface,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderStyle: 'dashed',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: theme.spacing.lg,
+  },
+  noReceiptLines: {
+    width: 38,
+    gap: 4,
+    marginBottom: theme.spacing.md,
+  },
+  noReceiptLine: {
+    height: 3,
+    borderRadius: 1.5,
+    backgroundColor: theme.colors.textSubtle,
+    width: '100%',
+  },
+  noReceiptTitle: {
+    ...theme.type.bodyStrong,
+    color: theme.colors.text,
+  },
+  noReceiptHint: {
+    ...theme.type.label,
+    color: theme.colors.textMuted,
+    marginTop: 4,
   },
 });

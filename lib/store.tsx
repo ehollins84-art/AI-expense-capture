@@ -19,6 +19,7 @@ import {
   deleteExpense as deleteExpenseFs,
   updateExpense as updateExpenseFs,
   deleteProjectAndExpenses,
+  attachImageToExpense as attachImageToExpenseFs,
 } from './storage';
 import {
   getStoredIteration,
@@ -53,9 +54,10 @@ type StoreCtx = StoreState & {
   removeProject: (project: Project) => Promise<void>;
   saveExpenseAndSync: (
     expense: Omit<Expense, 'id' | 'createdAt' | 'imageFilename'>,
-    imageUri: string,
+    imageUri: string | null,
   ) => Promise<Expense>;
   updateExpense: (expense: Expense) => Promise<Expense>;
+  attachImage: (expense: Expense, imageUri: string) => Promise<Expense>;
   removeExpense: (expense: Expense) => Promise<void>;
   refresh: () => Promise<void>;
   importFromDrive: (
@@ -199,13 +201,12 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const saveExpenseAndSync = useCallback(
     async (
       input: Omit<Expense, 'id' | 'createdAt' | 'imageFilename'>,
-      imageUri: string,
+      imageUri: string | null,
     ): Promise<Expense> => {
       const expense: Expense = {
         ...input,
         id: newId(),
         createdAt: new Date().toISOString(),
-        imageFilename: 'receipt.jpg',
       };
       const stored = await saveExpense(iteration, expense, imageUri);
       setExpenses((prev) => [...prev, stored]);
@@ -259,6 +260,23 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     [expenses, projects, iteration],
   );
 
+  const attachImage = useCallback(
+    async (expense: Expense, imageUri: string): Promise<Expense> => {
+      const stored = await attachImageToExpenseFs(iteration, expense, imageUri);
+      setExpenses((prev) =>
+        prev.map((e) => (e.id === stored.id ? stored : e)),
+      );
+      const proj = projects.find((p) => p.id === stored.projectId);
+      if (proj && (await isConnected())) {
+        uploadExpenseToDrive(iteration, proj, stored, imageUri).catch((err) =>
+          console.warn('Drive sync failed:', err),
+        );
+      }
+      return stored;
+    },
+    [iteration, projects],
+  );
+
   const importFromDrive = useCallback(
     async (
       iter: string,
@@ -293,6 +311,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       removeProject,
       saveExpenseAndSync,
       updateExpense,
+      attachImage,
       removeExpense,
       refresh,
       importFromDrive,
@@ -310,6 +329,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       removeProject,
       saveExpenseAndSync,
       updateExpense,
+      attachImage,
       removeExpense,
       refresh,
       importFromDrive,

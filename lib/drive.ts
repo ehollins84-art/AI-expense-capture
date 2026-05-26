@@ -509,7 +509,7 @@ export async function uploadExpenseToDrive(
   iteration: string,
   project: Project,
   expense: Expense,
-  imageUri: string,
+  imageUri: string | null,
 ): Promise<void> {
   const token = await getValidToken();
   if (!token) return;
@@ -547,24 +547,26 @@ export async function uploadExpenseToDrive(
     `base/${iteration}/${project.name}/${year}/${folderName}`,
   );
 
-  // Upload image only if it's not already there.
-  const existingImageId = await findFileId(
-    token,
-    expense.imageFilename,
-    expenseFolderId,
-  );
-  if (!existingImageId) {
-    const base64 = await FileSystem.readAsStringAsync(imageUri, {
-      encoding: FileSystem.EncodingType.Base64,
-    });
-    await uploadFile(
+  // Upload image only if one exists and isn't already on Drive.
+  if (expense.imageFilename && imageUri) {
+    const existingImageId = await findFileId(
       token,
-      expenseFolderId,
       expense.imageFilename,
-      imageMediaType(expense.imageFilename),
-      base64,
-      true,
+      expenseFolderId,
     );
+    if (!existingImageId) {
+      const base64 = await FileSystem.readAsStringAsync(imageUri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+      await uploadFile(
+        token,
+        expenseFolderId,
+        expense.imageFilename,
+        imageMediaType(expense.imageFilename),
+        base64,
+        true,
+      );
+    }
   }
 
   await writeJson(token, expenseFolderId, 'metadata.json', {
@@ -592,7 +594,7 @@ export async function syncExpenseEdit(
   project: Project,
   oldExpense: Expense,
   newExpense: Expense,
-  imageUri: string,
+  imageUri: string | null,
 ): Promise<void> {
   const oldFolderName = expenseFolderName(oldExpense);
   const newFolderName = expenseFolderName(newExpense);
@@ -870,7 +872,7 @@ export async function importIteration(
         category: parsed.category,
         amount: parsed.amount,
         currency: parsed.currency ?? 'USD',
-        imageFilename: parsed.imageFilename ?? 'receipt.jpg',
+        imageFilename: parsed.imageFilename,
         notes: parsed.notes,
         createdAt: parsed.createdAt ?? new Date().toISOString(),
       };
@@ -884,24 +886,27 @@ export async function importIteration(
       continue;
     }
 
-    // Download the image to its final local path first.
+    // Download the image to its final local path first (skipped for manual
+    // entries that never had one).
     const localFolder = expenseFolderPath(iteration, expense);
     await ensureDir(localFolder);
-    const imageId = await findFileId(
-      token,
-      expense.imageFilename,
-      task.expenseFolder.id,
-    );
-    if (imageId) {
-      try {
-        await downloadFileToPath(
-          token,
-          imageId,
-          `${localFolder}${expense.imageFilename}`,
-        );
-      } catch (e) {
-        lossy.push(`Image download failed for ${expense.title}`);
-        // Continue — metadata still gets imported, image will just be missing.
+    if (expense.imageFilename) {
+      const imageId = await findFileId(
+        token,
+        expense.imageFilename,
+        task.expenseFolder.id,
+      );
+      if (imageId) {
+        try {
+          await downloadFileToPath(
+            token,
+            imageId,
+            `${localFolder}${expense.imageFilename}`,
+          );
+        } catch (e) {
+          lossy.push(`Image download failed for ${expense.title}`);
+          // Continue — metadata still gets imported, image will just be missing.
+        }
       }
     }
 

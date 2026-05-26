@@ -17,7 +17,7 @@ export type Expense = {
   category: string;
   amount: number;
   currency: string;
-  imageFilename: string;
+  imageFilename?: string;
   notes?: string;
   createdAt: string;
 };

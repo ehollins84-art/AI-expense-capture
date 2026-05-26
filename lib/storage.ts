@@ -122,19 +122,22 @@ export async function writeExpenses(
 export async function saveExpense(
   letter: string,
   expense: Expense,
-  sourceImageUri: string,
+  sourceImageUri: string | null,
 ): Promise<Expense> {
   const year = new Date(expense.date).getFullYear();
   const folderPath = `${yearDir(letter, expense.projectId, year)}${expenseFolderName(expense)}/`;
   await ensureDir(folderPath);
 
-  const ext = sourceImageUri.split('.').pop()?.toLowerCase() || 'jpg';
-  const safeExt = ['jpg', 'jpeg', 'png', 'heic', 'webp'].includes(ext)
-    ? ext
-    : 'jpg';
-  const imageFilename = `receipt.${safeExt}`;
-  const destImage = `${folderPath}${imageFilename}`;
-  await FileSystem.copyAsync({ from: sourceImageUri, to: destImage });
+  let imageFilename: string | undefined;
+  if (sourceImageUri) {
+    const ext = sourceImageUri.split('.').pop()?.toLowerCase() || 'jpg';
+    const safeExt = ['jpg', 'jpeg', 'png', 'heic', 'webp'].includes(ext)
+      ? ext
+      : 'jpg';
+    imageFilename = `receipt.${safeExt}`;
+    const destImage = `${folderPath}${imageFilename}`;
+    await FileSystem.copyAsync({ from: sourceImageUri, to: destImage });
+  }
 
   const stored: Expense = { ...expense, imageFilename };
   const metaText = [
@@ -160,7 +163,8 @@ export async function saveExpense(
 export async function imagePathForExpense(
   letter: string,
   expense: Expense,
-): Promise<string> {
+): Promise<string | null> {
+  if (!expense.imageFilename) return null;
   const year = new Date(expense.date).getFullYear();
   const folder = `${yearDir(letter, expense.projectId, year)}${expenseFolderName(expense)}/`;
   return `${folder}${expense.imageFilename}`;
@@ -224,6 +228,37 @@ export async function updateExpense(
     all.map((e) => (e.id === newExpense.id ? newExpense : e)),
   );
   return newExpense;
+}
+
+export async function attachImageToExpense(
+  letter: string,
+  expense: Expense,
+  sourceImageUri: string,
+): Promise<Expense> {
+  const year = new Date(expense.date).getFullYear();
+  const folderPath = `${yearDir(letter, expense.projectId, year)}${expenseFolderName(expense)}/`;
+  await ensureDir(folderPath);
+
+  const ext = sourceImageUri.split('.').pop()?.toLowerCase() || 'jpg';
+  const safeExt = ['jpg', 'jpeg', 'png', 'heic', 'webp'].includes(ext)
+    ? ext
+    : 'jpg';
+  const imageFilename = `receipt.${safeExt}`;
+  const destImage = `${folderPath}${imageFilename}`;
+  await FileSystem.copyAsync({ from: sourceImageUri, to: destImage });
+
+  const stored: Expense = { ...expense, imageFilename };
+  await FileSystem.writeAsStringAsync(
+    `${folderPath}metadata.json`,
+    JSON.stringify(stored, null, 2),
+  );
+
+  const all = await readExpenses(letter);
+  await writeExpenses(
+    letter,
+    all.map((e) => (e.id === stored.id ? stored : e)),
+  );
+  return stored;
 }
 
 export async function deleteProjectAndExpenses(

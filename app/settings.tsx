@@ -292,6 +292,55 @@ export default function Settings() {
           <Text style={styles.heading}>Settings</Text>
         </Pressable>
 
+        <Section title="Projects">
+          {projects.length === 0 ? (
+            <Card>
+              <Text style={styles.value}>No projects yet.</Text>
+            </Card>
+          ) : (
+            projects.map((p) => (
+              <Pressable
+                key={p.id}
+                style={styles.projectCard}
+                hapticOnPress="select"
+                scaleTo={0.98}
+                onPress={() =>
+                  router.push({
+                    pathname: '/projects/[id]',
+                    params: { id: p.id },
+                  })
+                }
+              >
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.projectName} numberOfLines={1}>
+                    {p.name}
+                  </Text>
+                  <Text style={styles.projectMeta}>{labelForScheme(p.scheme)}</Text>
+                </View>
+                <Text style={styles.projectChevron}>›</Text>
+              </Pressable>
+            ))
+          )}
+          <Pressable
+            style={[styles.btn, styles.btnGhost, { marginTop: theme.spacing.sm }]}
+            hapticOnPress="select"
+            onPress={() => router.push('/projects/new')}
+          >
+            <Text style={styles.btnGhostText}>+ New project</Text>
+          </Pressable>
+        </Section>
+
+        <Section title="AI">
+          <Card>
+            <Text style={styles.label}>Receipt reading</Text>
+            <Text style={styles.value}>
+              {claudeConfigured()
+                ? 'Set up — receipts are read automatically.'
+                : "Not set up — you'll fill in receipt details by hand."}
+            </Text>
+          </Card>
+        </Section>
+
         <Section title="Backup">
           <Card>
             <Text style={styles.label}>Current backup</Text>
@@ -368,55 +417,6 @@ export default function Settings() {
                 </Pressable>
               </>
             )}
-          </Card>
-        </Section>
-
-        <Section title="Projects">
-          {projects.length === 0 ? (
-            <Card>
-              <Text style={styles.value}>No projects yet.</Text>
-            </Card>
-          ) : (
-            projects.map((p) => (
-              <Pressable
-                key={p.id}
-                style={styles.projectCard}
-                hapticOnPress="select"
-                scaleTo={0.98}
-                onPress={() =>
-                  router.push({
-                    pathname: '/projects/[id]',
-                    params: { id: p.id },
-                  })
-                }
-              >
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.projectName} numberOfLines={1}>
-                    {p.name}
-                  </Text>
-                  <Text style={styles.projectMeta}>{labelForScheme(p.scheme)}</Text>
-                </View>
-                <Text style={styles.projectChevron}>›</Text>
-              </Pressable>
-            ))
-          )}
-          <Pressable
-            style={[styles.btn, styles.btnGhost, { marginTop: theme.spacing.sm }]}
-            hapticOnPress="select"
-            onPress={() => router.push('/projects/new')}
-          >
-            <Text style={styles.btnGhostText}>+ New project</Text>
-          </Pressable>
-        </Section>
-
-        <Section title="AI">
-          <Card>
-            <Text style={styles.label}>Receipt reading</Text>
-            <Text style={styles.value}>
-              {claudeConfigured()
-                ? 'Set up — receipts are read automatically.'
-                : "Not set up — you'll fill in receipt details by hand."}
-            </Text>
           </Card>
         </Section>
 
