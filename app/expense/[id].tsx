@@ -241,44 +241,6 @@ export default function ExpenseDetail() {
             </Pressable>
           </View>
 
-          <View style={styles.thumbWrap}>
-            {imageUri ? (
-              <Pressable
-                onPress={() => {
-                  haptic.select();
-                  setLightboxOpen(true);
-                }}
-                scaleTo={0.96}
-                style={styles.thumbCard}
-              >
-                <Image
-                  source={{ uri: imageUri }}
-                  style={styles.thumbImage}
-                  contentFit="cover"
-                />
-                <View pointerEvents="none" style={styles.thumb_tl} />
-                <View pointerEvents="none" style={styles.thumb_tr} />
-                <View pointerEvents="none" style={styles.thumb_bl} />
-                <View pointerEvents="none" style={styles.thumb_br} />
-              </Pressable>
-            ) : (
-              <Pressable
-                onPress={offerAttach}
-                hapticOnPress="select"
-                scaleTo={0.96}
-                style={styles.thumbPlaceholder}
-              >
-                <View style={styles.plusGlyph}>
-                  <View style={styles.plusH} />
-                  <View style={styles.plusV} />
-                </View>
-              </Pressable>
-            )}
-            <Text style={styles.thumbCaption}>
-              {imageUri ? 'Tap to view' : 'Add photo'}
-            </Text>
-          </View>
-
           {editing === 'amount' ? (
             <View style={styles.amountEditRow}>
               <TextInput
@@ -496,6 +458,46 @@ export default function ExpenseDetail() {
               </>
             )}
           </View>
+
+          <View style={styles.thumbWrap}>
+            {imageUri ? (
+              <View style={styles.thumbShadow}>
+                <Pressable
+                  onPress={() => {
+                    haptic.select();
+                    setLightboxOpen(true);
+                  }}
+                  scaleTo={0.96}
+                  style={styles.thumbClip}
+                >
+                  <Image
+                    source={{ uri: imageUri }}
+                    style={styles.thumbImage}
+                    contentFit="cover"
+                  />
+                  <View pointerEvents="none" style={styles.thumb_tl} />
+                  <View pointerEvents="none" style={styles.thumb_tr} />
+                  <View pointerEvents="none" style={styles.thumb_bl} />
+                  <View pointerEvents="none" style={styles.thumb_br} />
+                </Pressable>
+              </View>
+            ) : (
+              <>
+                <Pressable
+                  onPress={offerAttach}
+                  hapticOnPress="select"
+                  scaleTo={0.96}
+                  style={styles.thumbPlaceholder}
+                >
+                  <View style={styles.plusGlyph}>
+                    <View style={styles.plusH} />
+                    <View style={styles.plusV} />
+                  </View>
+                </Pressable>
+                <Text style={styles.thumbCaption}>Add photo</Text>
+              </>
+            )}
+          </View>
         </ScrollView>
       </KeyboardAvoidingView>
 
@@ -657,23 +659,28 @@ const styles = StyleSheet.create({
   catChipTextActive: { color: '#fff' },
   thumbWrap: {
     alignItems: 'center',
+    marginTop: theme.spacing.lg,
     marginBottom: theme.spacing.lg,
   },
-  thumbCard: {
-    width: 112,
-    height: 148,
-    borderRadius: theme.radius.md,
-    backgroundColor: theme.colors.surfaceAlt,
-    overflow: 'hidden',
+  thumbShadow: {
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.12,
     shadowRadius: 10,
     elevation: 4,
+    borderRadius: theme.radius.md,
+    backgroundColor: theme.colors.surfaceAlt,
+  },
+  thumbClip: {
+    width: 112,
+    height: 148,
+    borderRadius: theme.radius.md,
+    overflow: 'hidden',
+    backgroundColor: theme.colors.surfaceAlt,
   },
   thumbImage: {
-    width: '100%',
-    height: '100%',
+    width: 112,
+    height: 148,
   },
   thumbPlaceholder: {
     width: 112,
