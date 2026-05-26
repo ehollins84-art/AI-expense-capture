@@ -13,6 +13,7 @@ import { Screen } from '../components/Screen';
 import { Pressable } from '../components/Pressable';
 import { FabDial } from '../components/FabDial';
 import { MorphingMoney } from '../components/MorphingMoney';
+import { MagnifyingGlassIcon } from '../components/MagnifyingGlassIcon';
 import { useStore, useActiveProject } from '../lib/store';
 import { theme } from '../lib/theme';
 import { formatMoney, moneyTextStyle } from '../lib/format';
@@ -139,7 +140,15 @@ export default function Home() {
   return (
     <Screen>
       <View style={styles.headerRow}>
-        <View />
+        <Link href="/search" asChild>
+          <Pressable
+            style={styles.gear}
+            hitSlop={8}
+            hapticOnPress="select"
+          >
+            <MagnifyingGlassIcon size={18} color={theme.colors.text} />
+          </Pressable>
+        </Link>
         <Link href="/settings" asChild>
           <Pressable
             style={styles.gear}

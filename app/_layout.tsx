@@ -53,6 +53,14 @@ export default function RootLayout() {
                 gestureEnabled: true,
               }}
             />
+            <Stack.Screen
+              name="search"
+              options={{
+                presentation: 'transparentModal',
+                animation: 'fade',
+                gestureEnabled: true,
+              }}
+            />
           </Stack>
           <GlobalToasts />
         </StoreProvider>
