@@ -48,7 +48,7 @@ If you need an API key, a login credential, a config value, or access to an exte
 
 ## After You Push Code
 
-I run the app from a GitHub Codespace, so every code change you push means I need to pull it down before I can test on my phone. **Always end your reply with the exact terminal line I'll need next**, as a copy-pasteable code block. Don't make me ask.
+I run the app from a GitHub Codespace, so every code change you push means I need to pull it down before I can test on my phone. **Always end your reply with the exact terminal lines I'll need next**, as copy-pasteable code blocks. Don't make me ask — and don't make me hunt for the Expo start command in a different message. Include both the pull line AND the Expo start line every time, even if Expo is probably still running. I can ignore the second one if I don't need it.
 
 Defaults to use:
 
@@ -56,17 +56,21 @@ Defaults to use:
   ```
   git checkout package-lock.json && git pull
   ```
-  Then tell me to reload Expo.
+  ```
+  npx expo start --tunnel --clear
+  ```
+  (Use the second one only if Expo isn't already running; otherwise just reload from the QR code or terminal.)
 
 - **You added or upgraded a package:**
   ```
   git checkout package-lock.json && git pull && npm ci
   ```
-  Then tell me to reload Expo. (`npm ci` is intentional — it installs strictly from the lockfile so we stop hitting "your local lock would be overwritten" merge conflicts.)
-
-- **Expo itself isn't running yet:**
   ```
   npx expo start --tunnel --clear
   ```
+  (`npm ci` is intentional — it installs strictly from the lockfile so we stop hitting "your local lock would be overwritten" merge conflicts. After a package change, prefer a fresh `npx expo start` rather than a hot reload — the second command is the one you want.)
 
-If a change requires me to do something special before testing (clear cache differently, sign out and back in, etc.), say so in one plain-English line above the command. If a change is purely a doc/comment edit that I don't need to test, you can skip the command — but say "no need to pull, this is doc-only" so I know.
+- **Doc-only change (CLAUDE.md, AGENTS.md, README, comments):**
+  Skip the commands. Say "no need to pull, this is doc-only" so I know.
+
+If a change requires me to do something special before testing (clear cache differently, sign out and back in, force-close Expo Go, etc.), say so in one plain-English line above the commands.
