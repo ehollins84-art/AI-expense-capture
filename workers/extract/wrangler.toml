@@ -1,0 +1,10 @@
+name = "schedule-e-ai-extract"
+main = "src/index.ts"
+compatibility_date = "2026-05-26"
+
+[vars]
+ANTHROPIC_MODEL = "claude-opus-4-7"
+
+# Secrets are NOT stored here. Set them via wrangler:
+#   wrangler secret put ANTHROPIC_API_KEY
+#   wrangler secret put APP_SHARED_SECRET
