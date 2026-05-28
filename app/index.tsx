@@ -113,7 +113,7 @@ export default function Home() {
     return (
       <Screen style={{ padding: theme.spacing.lg }}>
         <View style={styles.headerRow}>
-          <Text style={styles.appTitle}>Schedule E AI</Text>
+          <Text style={styles.appTitle}>Manila</Text>
           <Link href="/settings" asChild>
             <Pressable style={styles.gear} hitSlop={8} hapticOnPress="select">
               <Text style={styles.gearText}>⚙︎</Text>

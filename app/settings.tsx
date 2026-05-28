@@ -67,7 +67,7 @@ export default function Settings() {
   }
 
   const redirectUri = AuthSession.makeRedirectUri({
-    scheme: 'scheduleeai',
+    scheme: 'manila',
     path: 'redirect',
   });
 
@@ -445,7 +445,7 @@ export default function Settings() {
             </Card>
             <Card>
               <Text style={styles.label}>Build info</Text>
-              <Text style={styles.value}>Schedule E AI · v0.1.0</Text>
+              <Text style={styles.value}>Manila · v0.1.0</Text>
             </Card>
             <Card>
               <Text style={styles.label}>Google Client ID</Text>

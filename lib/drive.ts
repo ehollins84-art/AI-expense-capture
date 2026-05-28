@@ -11,7 +11,7 @@ import {
 } from './storage';
 
 export const SCHEMA_VERSION = 1;
-export const BASE_FOLDER_NAME = 'Schedule E AI';
+export const BASE_FOLDER_NAME = 'Manila';
 const MANIFEST_FILENAME = '_manifest.json';
 const PROJECT_FILENAME = 'project.json';
 const CONCURRENT_DEVICE_GRACE_MS = 7 * 24 * 60 * 60 * 1000;

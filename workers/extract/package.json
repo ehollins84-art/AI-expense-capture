@@ -1,5 +1,5 @@
 {
-  "name": "schedule-e-ai-extract",
+  "name": "manila-extract",
   "private": true,
   "scripts": {
     "deploy": "wrangler deploy",

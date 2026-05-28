@@ -28,7 +28,7 @@ npx wrangler deploy
 
 After `deploy`, wrangler prints a URL like:
 ```
-https://schedule-e-ai-extract.<your-subdomain>.workers.dev
+https://manila-extract.<your-subdomain>.workers.dev
 ```
 
 Copy that URL.
@@ -47,7 +47,7 @@ can authenticate to the Worker.
 
 Open `.env` in the project root and set:
 ```
-EXPO_PUBLIC_EXTRACT_URL=https://schedule-e-ai-extract.<your-subdomain>.workers.dev
+EXPO_PUBLIC_EXTRACT_URL=https://manila-extract.<your-subdomain>.workers.dev
 EXPO_PUBLIC_APP_TOKEN=<same value you set for APP_SHARED_SECRET>
 ```
 
@@ -58,13 +58,13 @@ section will now show "Set up — receipts are read automatically."
 
 Quick check from anywhere:
 ```bash
-curl https://schedule-e-ai-extract.<your-subdomain>.workers.dev/health
+curl https://manila-extract.<your-subdomain>.workers.dev/health
 # expected: ok
 ```
 
 Try an unauthorized call (should be 401):
 ```bash
-curl -X POST https://schedule-e-ai-extract.<your-subdomain>.workers.dev/extract \
+curl -X POST https://manila-extract.<your-subdomain>.workers.dev/extract \
   -H 'Content-Type: application/json' \
   -d '{}'
 # expected: Unauthorized

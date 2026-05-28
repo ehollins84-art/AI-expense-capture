@@ -1,12 +1,15 @@
 {
   "expo": {
-    "name": "Schedule E AI",
-    "slug": "schedule-e-ai",
+    "name": "Manila",
+    "slug": "manila",
     "version": "0.1.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
-    "scheme": "scheduleeai",
+    "scheme": "manila",
     "newArchEnabled": true,
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
     "icon": "./assets/icon.png",
     "splash": {
       "image": "./assets/splash-icon.png",
@@ -15,15 +18,15 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.scheduleeai.app",
+      "bundleIdentifier": "app.manila",
       "icon": "./assets/icon.png",
       "infoPlist": {
-        "NSCameraUsageDescription": "We use the camera to capture receipts for expense tracking.",
-        "NSPhotoLibraryUsageDescription": "We access your photo library so you can pick existing receipt photos."
+        "NSCameraUsageDescription": "Manila uses your camera to capture receipts.",
+        "NSPhotoLibraryUsageDescription": "Manila accesses your photo library so you can pick existing receipt photos."
       }
     },
     "android": {
-      "package": "com.scheduleeai.app",
+      "package": "app.manila",
       "permissions": ["CAMERA", "READ_EXTERNAL_STORAGE"],
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
@@ -38,13 +41,13 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Allow Schedule E AI to access your camera to capture receipts."
+          "cameraPermission": "Allow Manila to use your camera to capture receipts."
         }
       ],
       [
         "expo-image-picker",
         {
-          "photosPermission": "Allow Schedule E AI to access your photos to pick existing receipts."
+          "photosPermission": "Allow Manila to access your photos so you can pick existing receipt images."
         }
       ]
     ],

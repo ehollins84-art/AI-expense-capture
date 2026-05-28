@@ -2,7 +2,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as Crypto from 'expo-crypto';
 import type { Expense, Iteration, Project } from './types';
 
-const ROOT = FileSystem.documentDirectory + 'schedule-e-ai/';
+const ROOT = FileSystem.documentDirectory + 'manila/';
 
 export async function ensureDir(path: string) {
   const info = await FileSystem.getInfoAsync(path);

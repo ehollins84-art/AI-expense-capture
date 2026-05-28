@@ -1,4 +1,4 @@
-name = "schedule-e-ai-extract"
+name = "manila-extract"
 main = "src/index.ts"
 compatibility_date = "2026-05-26"
 

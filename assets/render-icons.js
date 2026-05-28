@@ -1,10 +1,10 @@
-// Generates the production icon set for Schedule E AI.
+// Generates the production icon set for Manila (folder tab on terracotta).
 //
 // Outputs:
 //   assets/icon.png             — 1024x1024 iOS + Android base icon
-//   assets/adaptive-icon.png    — 1024x1024 Android adaptive foreground
-//                                 (E centered in the safe zone, transparent bg)
-//   assets/splash-icon.png      — 1024x1024 splash screen image (the icon itself)
+//   assets/adaptive-icon.png    — 1024x1024 Android adaptive foreground (folder
+//                                 scaled into the safe zone so OS masks don't clip)
+//   assets/splash-icon.png      — 1024x1024 splash artwork on cream
 //   assets/favicon.png          —   48x48   web favicon
 
 const fs = require('fs');
@@ -15,85 +15,96 @@ const ROOT = __dirname;
 
 const CREAM = '#FAFAF7';
 const TERRA = '#C6633A';
+const MANILA = '#E8D2A6';
+const MANILA_DEEP = '#C8A877';
 
-// The "E" glyph as a group of rounded rects, sized to a 1024 canvas.
-// Returns SVG markup positioned at the canvas center.
-function eGlyph({
+const LIFT = `
+  <defs>
+    <linearGradient id="lift" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="white" stop-opacity="0.07"/>
+      <stop offset="0.55" stop-color="white" stop-opacity="0"/>
+      <stop offset="1" stop-color="black" stop-opacity="0.10"/>
+    </linearGradient>
+  </defs>
+`;
+
+// The Manila folder mark. Sized to fit in a 1024 viewbox.
+// Tab on top, folder body underneath.
+function folder({
   cx = 512,
   cy = 512,
-  width = 436, // overall glyph width
-  height = 528, // overall glyph height
-  color = CREAM,
+  width = 544,
+  tabWidth = 244,
+  tabHeight = 76,
+  bodyHeight = 436,
+  fill = MANILA,
+  tabFill,
+  topShadow = true,
 }) {
-  const spineW = Math.round(width * 0.32);
-  const barH = Math.round(height * 0.265);
-  const midBarW = Math.round(width * 0.74);
-  const radius = Math.round(barH * 0.235);
-
+  const tabFillResolved = tabFill ?? fill;
   const left = cx - width / 2;
-  const top = cy - height / 2;
-
+  const top = cy - (tabHeight + bodyHeight) / 2;
+  const tabLeft = cx - tabWidth / 2;
+  const bodyTop = top + tabHeight - 2; // overlap by 2pt to avoid hairline gap
+  const shadow = topShadow
+    ? `<rect x="${left}" y="${bodyTop}" width="${width}" height="40" fill="${MANILA_DEEP}" opacity="0.35"/>`
+    : '';
   return `
-    <g fill="${color}">
-      <!-- spine -->
-      <rect x="${left}" y="${top}" width="${spineW}" height="${height}" rx="${radius}"/>
-      <!-- top bar -->
-      <rect x="${left}" y="${top}" width="${width}" height="${barH}" rx="${radius}"/>
-      <!-- middle bar -->
-      <rect x="${left}" y="${cy - barH / 2}" width="${midBarW}" height="${barH}" rx="${radius}"/>
-      <!-- bottom bar -->
-      <rect x="${left}" y="${top + height - barH}" width="${width}" height="${barH}" rx="${radius}"/>
+    <g>
+      <rect x="${tabLeft}" y="${top}" width="${tabWidth}" height="${tabHeight}" rx="22" fill="${tabFillResolved}"/>
+      <rect x="${left}" y="${bodyTop}" width="${width}" height="${bodyHeight}" rx="32" fill="${fill}"/>
+      ${shadow}
     </g>
   `;
 }
 
-// Full app icon: terracotta background + cream E + subtle inner light/shade.
-function iconSVG({ size = 1024 } = {}) {
+function iconSVG() {
   return `
-<svg width="${size}" height="${size}" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <linearGradient id="lift" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="white" stop-opacity="0.07"/>
-      <stop offset="0.55" stop-color="white" stop-opacity="0"/>
-      <stop offset="1" stop-color="black" stop-opacity="0.10"/>
-    </linearGradient>
-  </defs>
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  ${LIFT}
   <rect width="1024" height="1024" fill="${TERRA}"/>
   <rect width="1024" height="1024" fill="url(#lift)"/>
-  ${eGlyph({})}
+  ${folder({})}
 </svg>`;
 }
 
-// Adaptive icon: E in TERRACOTTA on transparent, centered and scaled into
-// the Android safe zone (~66% of the canvas) so OS masks (circle, squircle,
-// teardrop) never clip the glyph. Background color is set via app.json.
-function adaptiveSVG({ size = 1024 } = {}) {
+// Adaptive icon (Android): folder rendered on transparent so the OS-applied
+// background shows through. Scaled to fit within the ~66% safe zone so
+// circular/squircle/teardrop masks never clip the folder.
+function adaptiveSVG() {
   return `
-<svg width="${size}" height="${size}" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
-  ${eGlyph({ width: 320, height: 388, color: CREAM })}
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  ${folder({
+    width: 380,
+    tabWidth: 170,
+    tabHeight: 54,
+    bodyHeight: 304,
+    topShadow: false,
+  })}
 </svg>`;
 }
 
-// Splash icon — same artwork as the app icon, smaller, rendered on cream
-// (Expo composites it onto the splash background color from app.json).
-function splashSVG({ size = 1024 } = {}) {
+// Splash: same icon artwork inside an iOS-style squircle plate, centered on
+// the cream splash background. Expo composites this onto backgroundColor
+// from app.json at runtime.
+function splashSVG() {
   return `
-<svg width="${size}" height="${size}" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
-  <!-- Rounded square plate matching the iOS app-icon mask, on cream bg -->
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  ${LIFT}
   <defs>
     <clipPath id="squircle">
       <rect x="232" y="232" width="560" height="560" rx="124" ry="124"/>
     </clipPath>
-    <linearGradient id="lift" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="white" stop-opacity="0.07"/>
-      <stop offset="0.55" stop-color="white" stop-opacity="0"/>
-      <stop offset="1" stop-color="black" stop-opacity="0.10"/>
-    </linearGradient>
   </defs>
   <g clip-path="url(#squircle)">
     <rect x="232" y="232" width="560" height="560" fill="${TERRA}"/>
     <rect x="232" y="232" width="560" height="560" fill="url(#lift)"/>
-    ${eGlyph({ width: 240, height: 290 })}
+    ${folder({
+      width: 300,
+      tabWidth: 134,
+      tabHeight: 42,
+      bodyHeight: 240,
+    })}
   </g>
 </svg>`;
 }
