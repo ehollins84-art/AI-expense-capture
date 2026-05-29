@@ -21,6 +21,7 @@
       "bundleIdentifier": "com.usemanila.app",
       "icon": "./assets/icon.png",
       "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
         "NSCameraUsageDescription": "Manila uses your camera to capture receipts.",
         "NSPhotoLibraryUsageDescription": "Manila accesses your photo library so you can pick existing receipt photos."
       }
