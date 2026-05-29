@@ -24,6 +24,7 @@ import { categoriesForProject } from '../lib/categories';
 import { extractReceipt, claudeConfigured } from '../lib/claude';
 import { formatDate } from '../lib/format';
 import { haptic } from '../lib/haptics';
+import { ensureCameraPermission, ensureLibraryPermission } from '../lib/permissions';
 import { signalReceiptSaved } from '../lib/uiSignals';
 import type { ExtractedReceipt } from '../lib/types';
 
@@ -72,6 +73,13 @@ export default function AddExpense() {
       }
       try {
         const fromLibrary = source === 'library';
+        const granted = fromLibrary
+          ? await ensureLibraryPermission()
+          : await ensureCameraPermission();
+        if (!granted) {
+          router.back();
+          return;
+        }
         const result = fromLibrary
           ? await ImagePicker.launchImageLibraryAsync({
               mediaTypes: ['images'],
@@ -244,6 +252,10 @@ export default function AddExpense() {
 
   async function attachPhoto(fromLibrary: boolean) {
     try {
+      const granted = fromLibrary
+        ? await ensureLibraryPermission()
+        : await ensureCameraPermission();
+      if (!granted) return;
       const result = fromLibrary
         ? await ImagePicker.launchImageLibraryAsync({
             mediaTypes: ['images'],

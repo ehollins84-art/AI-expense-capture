@@ -26,6 +26,7 @@ import { DatePickerModal } from '../../components/DatePickerModal';
 import { ReceiptLightbox } from '../../components/ReceiptLightbox';
 import { queuePendingDelete } from '../../lib/pendingDelete';
 import { signalExpenseDeleted } from '../../lib/uiSignals';
+import { ensureCameraPermission, ensureLibraryPermission } from '../../lib/permissions';
 import type { Expense } from '../../lib/types';
 
 type EditField = 'amount' | 'title' | 'category' | null;
@@ -161,6 +162,10 @@ export default function ExpenseDetail() {
   async function pickAndAttach(fromLibrary: boolean) {
     if (!expense) return;
     try {
+      const granted = fromLibrary
+        ? await ensureLibraryPermission()
+        : await ensureCameraPermission();
+      if (!granted) return;
       const result = fromLibrary
         ? await ImagePicker.launchImageLibraryAsync({
             mediaTypes: ['images'],
