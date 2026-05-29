@@ -2,7 +2,7 @@
   "expo": {
     "name": "Manila",
     "slug": "manila",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "scheme": "manila",
@@ -47,7 +47,8 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Allow Manila to access your photos so you can pick existing receipt images."
+          "photosPermission": "Allow Manila to access your photos so you can pick existing receipt images.",
+          "cameraPermission": "Allow Manila to use your camera to capture receipts."
         }
       ]
     ],
