@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
   FlatList,
+  Image,
   RefreshControl,
   StyleSheet,
   Text,
@@ -255,6 +256,18 @@ export default function Home() {
             </Text>
           </View>
         }
+        // The baby sits at the end of the list, so it naturally lands below
+        // whatever categories exist (and below the empty-state hint when there
+        // are none).
+        ListFooterComponent={
+          <View style={styles.babyFooter}>
+            <Image
+              source={require('../assets/baby.png')}
+              style={styles.babyImage}
+              resizeMode="contain"
+            />
+          </View>
+        }
         renderItem={({ item: [category, amount] }) => (
           <CategoryRow
             name={category}
@@ -454,6 +467,14 @@ const styles = StyleSheet.create({
     height: '100%',
     backgroundColor: theme.colors.accent,
     borderRadius: 2,
+  },
+  babyFooter: {
+    paddingTop: theme.spacing.xl,
+    alignItems: 'center',
+  },
+  babyImage: {
+    width: '80%',
+    aspectRatio: 4 / 3,
   },
   emptyState: {
     paddingTop: theme.spacing.xxl,
