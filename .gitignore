@@ -10,3 +10,8 @@ web-build/
 ios/
 android/
 expo-env.d.ts
+
+# Google Play service account key (used by `eas submit -p android`).
+# Must never be committed — anyone with this file can publish to your
+# Play Console.
+google-play-key.json
