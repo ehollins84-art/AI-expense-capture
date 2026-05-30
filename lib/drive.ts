@@ -199,6 +199,26 @@ async function driveFetch(
 
 const FOLDER_MIME = 'application/vnd.google-apps.folder';
 
+// --- Write serialization ------------------------------------------------------
+
+// Every Drive *mutation* runs through this single promise chain so two saves
+// firing at once (e.g. capturing receipts back-to-back, or a project + its
+// first expense) can't both try to build the `Manila/…` folder tree at the
+// same moment. That race previously created duplicate folders and stranded
+// files at the Drive root. Reads (listing/import) don't need the lock.
+let driveWriteChain: Promise<unknown> = Promise.resolve();
+
+function withDriveLock<T>(task: () => Promise<T>): Promise<T> {
+  const result = driveWriteChain.then(task, task);
+  // Keep the chain alive regardless of whether this task succeeded, so one
+  // failed upload doesn't wedge the queue for everything after it.
+  driveWriteChain = result.then(
+    () => undefined,
+    () => undefined,
+  );
+  return result;
+}
+
 function escapeDriveQuery(s: string): string {
   return s.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 }
@@ -211,7 +231,13 @@ async function findFolderId(
   const q = encodeURIComponent(
     `name='${escapeDriveQuery(name)}' and mimeType='${FOLDER_MIME}' and trashed=false and '${parentId}' in parents`,
   );
-  const resp = await driveFetch(token, `drive/v3/files?q=${q}&fields=files(id)`);
+  // Order by creation time so that if duplicate folders ever exist, every
+  // lookup deterministically resolves to the *oldest* one. New writes then
+  // funnel back into the original instead of fragmenting further.
+  const resp = await driveFetch(
+    token,
+    `drive/v3/files?q=${q}&fields=files(id)&orderBy=createdTime`,
+  );
   if (!resp.ok) return null;
   const json = (await resp.json()) as { files: Array<{ id: string }> };
   return json.files[0]?.id ?? null;
@@ -278,7 +304,12 @@ async function findOrCreateFolder(
   if (!createResp.ok) {
     throw new Error(`Drive create folder failed: ${createResp.status}`);
   }
-  const created = (await createResp.json()) as { id: string };
+  const created = (await createResp.json()) as { id?: string };
+  if (!created.id) {
+    // Defensive: never return an empty parent id, or downstream uploads would
+    // silently land at the Drive root.
+    throw new Error(`Drive create folder returned no id for "${name}"`);
+  }
   cache[cacheKey] = created.id;
   await writeFolderCache(cache);
   return created.id;
@@ -292,6 +323,13 @@ async function uploadFile(
   body: string,
   isBase64 = false,
 ): Promise<void> {
+  // Hard stop: a missing/blank parent makes Drive default the file to the
+  // root of My Drive. Every receipt file belongs inside its expense folder, so
+  // an empty parent here is always a bug — fail loudly instead of littering
+  // the user's Drive root.
+  if (!parentId) {
+    throw new Error(`Drive upload aborted: no parent folder for "${name}"`);
+  }
   const boundary = `boundary_${Math.random().toString(36).slice(2)}`;
   const metadata = JSON.stringify({ name, parents: [parentId] });
   const head =
@@ -489,7 +527,7 @@ async function resolveProjectFolder(
  * Write the project's manifest to its Drive folder. Creates the folder if needed.
  * Idempotent: overwrites any existing project.json.
  */
-export async function uploadProjectManifest(
+async function uploadProjectManifestImpl(
   iteration: string,
   project: Project,
 ): Promise<void> {
@@ -513,7 +551,7 @@ export async function uploadProjectManifest(
  * Idempotent upload of an expense: image goes up only if missing, metadata is
  * always rewritten so it acts as the per-expense write checkpoint.
  */
-export async function uploadExpenseToDrive(
+async function uploadExpenseToDriveImpl(
   iteration: string,
   project: Project,
   expense: Expense,
@@ -597,7 +635,7 @@ export async function uploadExpenseToDrive(
  * Upsert-and-cleanup for edits: upload to the new path, then delete the old
  * expense folder on Drive if its name or year changed.
  */
-export async function syncExpenseEdit(
+async function syncExpenseEditImpl(
   iteration: string,
   project: Project,
   oldExpense: Expense,
@@ -609,7 +647,7 @@ export async function syncExpenseEdit(
   const oldYear = new Date(oldExpense.date).getFullYear().toString();
   const newYear = new Date(newExpense.date).getFullYear().toString();
 
-  await uploadExpenseToDrive(iteration, project, newExpense, imageUri);
+  await uploadExpenseToDriveImpl(iteration, project, newExpense, imageUri);
 
   if (oldFolderName === newFolderName && oldYear === newYear) return;
 
@@ -633,7 +671,7 @@ export async function syncExpenseEdit(
   await writeFolderCache(cache);
 }
 
-export async function deleteExpenseFromDrive(
+async function deleteExpenseFromDriveImpl(
   iteration: string,
   project: Project,
   expense: Expense,
@@ -658,6 +696,52 @@ export async function deleteExpenseFromDrive(
   const cache = await readFolderCache();
   delete cache[`base/${iteration}/${project.name}/${year}/${folderName}`];
   await writeFolderCache(cache);
+}
+
+// --- Public mutation API (serialized) -----------------------------------------
+
+// Thin wrappers that funnel every Drive write through withDriveLock so they
+// run one at a time. The *Impl functions above must only call each other, never
+// these wrappers, or the single-lane queue would deadlock against itself.
+
+export function uploadProjectManifest(
+  iteration: string,
+  project: Project,
+): Promise<void> {
+  return withDriveLock(() => uploadProjectManifestImpl(iteration, project));
+}
+
+export function uploadExpenseToDrive(
+  iteration: string,
+  project: Project,
+  expense: Expense,
+  imageUri: string | null,
+): Promise<void> {
+  return withDriveLock(() =>
+    uploadExpenseToDriveImpl(iteration, project, expense, imageUri),
+  );
+}
+
+export function syncExpenseEdit(
+  iteration: string,
+  project: Project,
+  oldExpense: Expense,
+  newExpense: Expense,
+  imageUri: string | null,
+): Promise<void> {
+  return withDriveLock(() =>
+    syncExpenseEditImpl(iteration, project, oldExpense, newExpense, imageUri),
+  );
+}
+
+export function deleteExpenseFromDrive(
+  iteration: string,
+  project: Project,
+  expense: Expense,
+): Promise<void> {
+  return withDriveLock(() =>
+    deleteExpenseFromDriveImpl(iteration, project, expense),
+  );
 }
 
 // --- Listing ------------------------------------------------------------------
