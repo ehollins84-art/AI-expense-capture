@@ -36,10 +36,24 @@ import { VersionFooter } from '../components/VersionFooter';
 
 WebBrowser.maybeCompleteAuthSession();
 
+// iOS Google OAuth client. The reversed-DNS URL scheme is registered in
+// app.json (ios.infoPlist.CFBundleURLTypes) so the OS routes the OAuth
+// callback back to the app. Android will get its own client ID later.
 const GOOGLE_CLIENT_ID =
+  (Constants.expoConfig?.extra?.googleIosClientId as string | undefined) ??
   process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID ??
-  (Constants.expoConfig?.extra?.googleClientId as string | undefined) ??
   '';
+
+// Google requires iOS native clients to redirect to the reversed client ID
+// (e.g. com.googleusercontent.apps.123-abc:/oauthredirect). This scheme is
+// implicit for iOS OAuth clients — no separate registration in the console —
+// and must be registered in app.json (ios.infoPlist.CFBundleURLTypes).
+const IOS_REVERSED_CLIENT_ID = GOOGLE_CLIENT_ID
+  ? `com.googleusercontent.apps.${GOOGLE_CLIENT_ID.replace(
+      /\.apps\.googleusercontent\.com$/,
+      '',
+    )}`
+  : '';
 
 const discovery = {
   authorizationEndpoint: 'https://accounts.google.com/o/oauth2/v2/auth',
@@ -67,9 +81,15 @@ export default function Settings() {
     setTimeout(() => setCopiedRedirect(false), 1600);
   }
 
+  // Use the iOS reversed-client-ID URL on native (what Google expects for iOS
+  // OAuth clients). makeRedirectUri's `native` param overrides the generated
+  // value with this exact string on a real build.
   const redirectUri = AuthSession.makeRedirectUri({
     scheme: 'manila',
     path: 'redirect',
+    native: IOS_REVERSED_CLIENT_ID
+      ? `${IOS_REVERSED_CLIENT_ID}:/oauthredirect`
+      : undefined,
   });
 
   const [request, response, promptAsync] = AuthSession.useAuthRequest(

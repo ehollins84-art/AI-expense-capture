@@ -26,7 +26,14 @@
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSCameraUsageDescription": "Manila uses your camera to capture receipts.",
-        "NSPhotoLibraryUsageDescription": "Manila accesses your photo library so you can pick existing receipt photos."
+        "NSPhotoLibraryUsageDescription": "Manila accesses your photo library so you can pick existing receipt photos.",
+        "CFBundleURLTypes": [
+          {
+            "CFBundleURLSchemes": [
+              "com.googleusercontent.apps.269882818913-ghq48i534j57f92v6psubepv9ocfq0ng"
+            ]
+          }
+        ]
       }
     },
     "android": {
@@ -62,7 +69,8 @@
     "extra": {
       "eas": {
         "projectId": "ace9025c-57c1-498b-b1da-72b44f77c820"
-      }
+      },
+      "googleIosClientId": "269882818913-ghq48i534j57f92v6psubepv9ocfq0ng.apps.googleusercontent.com"
     }
   }
 }
