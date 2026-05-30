@@ -471,9 +471,11 @@ const styles = StyleSheet.create({
   babyFooter: {
     paddingTop: theme.spacing.xl,
     alignItems: 'center',
+    // Cancel the FlatList's horizontal padding so the image runs edge-to-edge.
+    marginHorizontal: -theme.spacing.lg,
   },
   babyImage: {
-    width: '80%',
+    width: '100%',
     aspectRatio: 4 / 3,
   },
   emptyState: {
