@@ -471,9 +471,13 @@ const styles = StyleSheet.create({
   babyFooter: {
     paddingTop: theme.spacing.xl,
     alignItems: 'center',
+    // Cancel the FlatList's horizontal padding so the image's left and right
+    // edges line up exactly with the left and right edges of the app screen.
+    marginHorizontal: -theme.spacing.lg,
   },
   babyImage: {
-    width: '65%',
+    width: '100%',
+    // Preserve the image's real proportions so it's never stretched or cropped.
     aspectRatio: 782 / 517,
   },
   emptyState: {
