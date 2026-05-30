@@ -3,9 +3,18 @@ import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
-import { StoreProvider } from '../lib/store';
+import { StoreProvider, useStore } from '../lib/store';
 import { theme } from '../lib/theme';
 import { GlobalToasts } from '../components/GlobalToasts';
+import { SessionSplash } from '../components/SessionSplash';
+
+// Reads the store's `loading` flag and shows the splash overlay until the
+// app finishes booting (and a minimum dwell time has passed, handled inside
+// SessionSplash itself). Mounted once per cold start.
+function SplashGate() {
+  const { loading } = useStore();
+  return <SessionSplash ready={!loading} />;
+}
 
 export default function RootLayout() {
   return (
@@ -68,6 +77,7 @@ export default function RootLayout() {
             />
           </Stack>
           <GlobalToasts />
+          <SplashGate />
           </StoreProvider>
         </SafeAreaProvider>
       </KeyboardProvider>
