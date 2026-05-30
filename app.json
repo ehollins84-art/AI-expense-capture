@@ -10,6 +10,9 @@
     "runtimeVersion": {
       "policy": "appVersion"
     },
+    "updates": {
+      "url": "https://u.expo.dev/ace9025c-57c1-498b-b1da-72b44f77c820"
+    },
     "icon": "./assets/icon.png",
     "splash": {
       "image": "./assets/splash-icon.png",
@@ -55,6 +58,11 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "eas": {
+        "projectId": "ace9025c-57c1-498b-b1da-72b44f77c820"
+      }
     }
   }
 }
