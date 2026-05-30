@@ -3,14 +3,12 @@ import {
   Alert,
   Animated,
   Keyboard,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
@@ -219,15 +217,13 @@ export default function ExpenseDetail() {
 
   return (
     <Screen edges={['top']}>
-      <KeyboardAvoidingView
+      <KeyboardAwareScrollView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        contentContainerStyle={styles.scroll}
+        keyboardShouldPersistTaps="handled"
+        bottomOffset={theme.spacing.lg}
       >
-        <ScrollView
-          contentContainerStyle={styles.scroll}
-          keyboardShouldPersistTaps="handled"
-        >
-          <View style={styles.topBar}>
+        <View style={styles.topBar}>
             <Pressable
               onPress={() => router.back()}
               style={styles.backBtn}
@@ -511,8 +507,7 @@ export default function ExpenseDetail() {
               </>
             )}
           </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
+      </KeyboardAwareScrollView>
 
       <DatePickerModal
         visible={datePickerOpen}

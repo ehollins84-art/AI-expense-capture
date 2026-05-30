@@ -2,12 +2,11 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   FlatList,
   Keyboard,
-  KeyboardAvoidingView,
-  Platform,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useRouter } from 'expo-router';
 import { Screen } from '../components/Screen';
 import { Pressable } from '../components/Pressable';
@@ -131,10 +130,7 @@ export default function Search() {
 
   return (
     <Screen edges={['top']}>
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
         <SearchField
           value={query}
           onChangeText={setQuery}

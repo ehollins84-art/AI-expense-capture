@@ -2,8 +2,6 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  KeyboardAvoidingView,
-  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -11,10 +9,10 @@ import {
   View,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { Screen } from '../components/Screen';
+import { KeyboardAwareFooter } from '../components/KeyboardAwareFooter';
 import { Pressable } from '../components/Pressable';
 import { ExtractingState } from '../components/ExtractingState';
 import { DatePickerModal } from '../components/DatePickerModal';
@@ -43,7 +41,6 @@ const STEP_HOLD_MS = 140;
 
 export default function AddExpense() {
   const router = useRouter();
-  const insets = useSafeAreaInsets();
   const { source } = useLocalSearchParams<{ source?: string }>();
   const { saveExpenseAndSync, projects } = useStore();
   const active = useActiveProject();
@@ -311,15 +308,11 @@ export default function AddExpense() {
 
   return (
     <Screen edges={['top']}>
-      <KeyboardAvoidingView
+      <ScrollView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? -insets.bottom : 0}
+        contentContainerStyle={styles.scroll}
+        keyboardShouldPersistTaps="handled"
       >
-        <ScrollView
-          contentContainerStyle={styles.scroll}
-          keyboardShouldPersistTaps="handled"
-        >
           <View style={styles.topBar}>
             <Pressable style={styles.cancelBtn} onPress={() => router.back()}>
               <Text style={styles.cancelText}>Cancel</Text>
@@ -476,39 +469,33 @@ export default function AddExpense() {
           </View>
 
           <View style={{ height: theme.spacing.xxl }} />
-        </ScrollView>
+      </ScrollView>
 
-        <DatePickerModal
-          visible={datePickerOpen}
-          initialDate={date || new Date().toISOString().slice(0, 10)}
-          onSubmit={(iso) => {
-            setDate(iso);
-            setDatePickerOpen(false);
-          }}
-          onDismiss={() => setDatePickerOpen(false)}
-        />
+      <DatePickerModal
+        visible={datePickerOpen}
+        initialDate={date || new Date().toISOString().slice(0, 10)}
+        onSubmit={(iso) => {
+          setDate(iso);
+          setDatePickerOpen(false);
+        }}
+        onDismiss={() => setDatePickerOpen(false)}
+      />
 
-        <View
+      <KeyboardAwareFooter>
+        <Pressable
           style={[
-            styles.bottomBar,
-            { paddingBottom: theme.spacing.lg + insets.bottom },
+            styles.lookGoodBtn,
+            (phase === 'saving' || !!reveal) && { opacity: 0.4 },
           ]}
+          disabled={phase === 'saving' || !!reveal}
+          hapticOnPress="light"
+          onPress={handleSave}
         >
-          <Pressable
-            style={[
-              styles.lookGoodBtn,
-              (phase === 'saving' || !!reveal) && { opacity: 0.4 },
-            ]}
-            disabled={phase === 'saving' || !!reveal}
-            hapticOnPress="light"
-            onPress={handleSave}
-          >
-            <Text style={styles.lookGoodText}>
-              {phase === 'saving' ? 'Saving…' : 'Looks good'}
-            </Text>
-          </Pressable>
-        </View>
-      </KeyboardAvoidingView>
+          <Text style={styles.lookGoodText}>
+            {phase === 'saving' ? 'Saving…' : 'Looks good'}
+          </Text>
+        </Pressable>
+      </KeyboardAwareFooter>
     </Screen>
   );
 }
@@ -686,13 +673,6 @@ const styles = StyleSheet.create({
   catChipText: { ...theme.type.label, color: theme.colors.text },
   catChipTextActive: { color: '#fff' },
   amountRow: { flexDirection: 'row', alignItems: 'flex-start' },
-  bottomBar: {
-    paddingTop: theme.spacing.lg,
-    paddingHorizontal: theme.spacing.lg,
-    borderTopWidth: 1,
-    borderTopColor: theme.colors.border,
-    backgroundColor: theme.colors.bg,
-  },
   lookGoodBtn: {
     backgroundColor: theme.colors.text,
     borderRadius: theme.radius.pill,

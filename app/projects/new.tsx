@@ -1,8 +1,6 @@
 import React, { useState } from 'react';
 import {
   Alert,
-  KeyboardAvoidingView,
-  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -10,8 +8,8 @@ import {
   View,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Screen } from '../../components/Screen';
+import { KeyboardAwareFooter } from '../../components/KeyboardAwareFooter';
 import { Pressable } from '../../components/Pressable';
 import { useStore } from '../../lib/store';
 import { theme } from '../../lib/theme';
@@ -24,7 +22,6 @@ import type { CategoryScheme } from '../../lib/types';
 
 export default function NewProject() {
   const router = useRouter();
-  const insets = useSafeAreaInsets();
   const { addProject } = useStore();
   const [name, setName] = useState('');
   const [scheme, setScheme] = useState<CategoryScheme>('schedule_e');
@@ -71,15 +68,11 @@ export default function NewProject() {
 
   return (
     <Screen edges={['top']}>
-      <KeyboardAvoidingView
+      <ScrollView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? -insets.bottom : 0}
+        contentContainerStyle={styles.scroll}
+        keyboardShouldPersistTaps="handled"
       >
-        <ScrollView
-          contentContainerStyle={styles.scroll}
-          keyboardShouldPersistTaps="handled"
-        >
           <View style={styles.topBar}>
             <Pressable
               onPress={() => router.back()}
@@ -156,23 +149,17 @@ export default function NewProject() {
           )}
 
           <View style={{ height: theme.spacing.xl }} />
-        </ScrollView>
+      </ScrollView>
 
-        <View
-          style={[
-            styles.bottomBar,
-            { paddingBottom: theme.spacing.lg + insets.bottom },
-          ]}
+      <KeyboardAwareFooter>
+        <Pressable
+          style={styles.cta}
+          hapticOnPress="light"
+          onPress={handleCreate}
         >
-          <Pressable
-            style={styles.cta}
-            hapticOnPress="light"
-            onPress={handleCreate}
-          >
-            <Text style={styles.ctaText}>Create project</Text>
-          </Pressable>
-        </View>
-      </KeyboardAvoidingView>
+          <Text style={styles.ctaText}>Create project</Text>
+        </Pressable>
+      </KeyboardAwareFooter>
     </Screen>
   );
 }
@@ -269,13 +256,6 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.pill,
   },
   previewChipText: { ...theme.type.label, color: theme.colors.textMuted },
-  bottomBar: {
-    paddingTop: theme.spacing.lg,
-    paddingHorizontal: theme.spacing.lg,
-    borderTopWidth: 1,
-    borderTopColor: theme.colors.border,
-    backgroundColor: theme.colors.bg,
-  },
   cta: {
     backgroundColor: theme.colors.text,
     borderRadius: theme.radius.pill,

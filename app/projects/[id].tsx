@@ -1,14 +1,12 @@
 import React, { useMemo, useState } from 'react';
 import {
   Alert,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Screen } from '../../components/Screen';
 import { Pressable } from '../../components/Pressable';
@@ -206,11 +204,9 @@ export default function EditProject() {
 
   return (
     <Screen>
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
-        <View style={styles.topBar}>
+      {/* Fixed header stays put; the form below scrolls and keeps the focused
+          field above the keyboard via KeyboardAwareScrollView. */}
+      <View style={styles.topBar}>
           <Pressable
             onPress={() => router.back()}
             hapticOnPress="select"
@@ -232,11 +228,13 @@ export default function EditProject() {
           </Pressable>
         </View>
 
-        <ScrollView
-          contentContainerStyle={styles.scroll}
-          keyboardShouldPersistTaps="handled"
-        >
-          <Text style={styles.heading}>Edit project</Text>
+      <KeyboardAwareScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={styles.scroll}
+        keyboardShouldPersistTaps="handled"
+        bottomOffset={theme.spacing.lg}
+      >
+        <Text style={styles.heading}>Edit project</Text>
 
           <Text style={styles.fieldLabel}>Name</Text>
           <TextInput
@@ -351,9 +349,8 @@ export default function EditProject() {
             </Text>
           </Pressable>
 
-          <View style={{ height: theme.spacing.xxl }} />
-        </ScrollView>
-      </KeyboardAvoidingView>
+        <View style={{ height: theme.spacing.xxl }} />
+      </KeyboardAwareScrollView>
     </Screen>
   );
 }

@@ -2,6 +2,7 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { StoreProvider } from '../lib/store';
 import { theme } from '../lib/theme';
 import { GlobalToasts } from '../components/GlobalToasts';
@@ -9,8 +10,12 @@ import { GlobalToasts } from '../components/GlobalToasts';
 export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <SafeAreaProvider>
-        <StoreProvider>
+      {/* KeyboardProvider powers the keyboard-aware footers on the form screens.
+          It must wrap the whole navigation tree so KeyboardStickyView works on
+          every screen (and identically on iOS + Android). */}
+      <KeyboardProvider>
+        <SafeAreaProvider>
+          <StoreProvider>
           <StatusBar style="dark" />
           <Stack
             initialRouteName="index"
@@ -63,8 +68,9 @@ export default function RootLayout() {
             />
           </Stack>
           <GlobalToasts />
-        </StoreProvider>
-      </SafeAreaProvider>
+          </StoreProvider>
+        </SafeAreaProvider>
+      </KeyboardProvider>
     </GestureHandlerRootView>
   );
 }
