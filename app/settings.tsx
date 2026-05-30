@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Alert,
   Modal,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -36,19 +37,23 @@ import { VersionFooter } from '../components/VersionFooter';
 
 WebBrowser.maybeCompleteAuthSession();
 
-// iOS Google OAuth client. The reversed-DNS URL scheme is registered in
-// app.json (ios.infoPlist.CFBundleURLTypes) so the OS routes the OAuth
-// callback back to the app. Android will get its own client ID later.
+// Google requires separate native OAuth clients for iOS and Android (each
+// scoped to bundle ID + signing certificate). The matching reversed-DNS URL
+// scheme is registered in app.json so the OS routes the OAuth callback back
+// to the app — CFBundleURLTypes on iOS, intentFilters on Android.
 const GOOGLE_CLIENT_ID =
-  (Constants.expoConfig?.extra?.googleIosClientId as string | undefined) ??
+  (Platform.select({
+    ios: Constants.expoConfig?.extra?.googleIosClientId,
+    android: Constants.expoConfig?.extra?.googleAndroidClientId,
+  }) as string | undefined) ??
   process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID ??
   '';
 
-// Google requires iOS native clients to redirect to the reversed client ID
-// (e.g. com.googleusercontent.apps.123-abc:/oauthredirect). This scheme is
-// implicit for iOS OAuth clients — no separate registration in the console —
-// and must be registered in app.json (ios.infoPlist.CFBundleURLTypes).
-const IOS_REVERSED_CLIENT_ID = GOOGLE_CLIENT_ID
+// Reverse the client ID into Google's required redirect-scheme form
+// (com.googleusercontent.apps.<id>:/oauthredirect). Same shape on both
+// platforms; only the numeric/letter suffix differs because the clients
+// themselves differ.
+const REVERSED_CLIENT_ID = GOOGLE_CLIENT_ID
   ? `com.googleusercontent.apps.${GOOGLE_CLIENT_ID.replace(
       /\.apps\.googleusercontent\.com$/,
       '',
@@ -87,8 +92,8 @@ export default function Settings() {
   const redirectUri = AuthSession.makeRedirectUri({
     scheme: 'manila',
     path: 'redirect',
-    native: IOS_REVERSED_CLIENT_ID
-      ? `${IOS_REVERSED_CLIENT_ID}:/oauthredirect`
+    native: REVERSED_CLIENT_ID
+      ? `${REVERSED_CLIENT_ID}:/oauthredirect`
       : undefined,
   });
 

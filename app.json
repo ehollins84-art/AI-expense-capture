@@ -42,7 +42,18 @@
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#C6633A"
-      }
+      },
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "data": [
+            {
+              "scheme": "com.googleusercontent.apps.269882818913-b6o0rp039qkfr54h7oblantvdf4b2kee"
+            }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -70,7 +81,8 @@
       "eas": {
         "projectId": "ace9025c-57c1-498b-b1da-72b44f77c820"
       },
-      "googleIosClientId": "269882818913-ghq48i534j57f92v6psubepv9ocfq0ng.apps.googleusercontent.com"
+      "googleIosClientId": "269882818913-ghq48i534j57f92v6psubepv9ocfq0ng.apps.googleusercontent.com",
+      "googleAndroidClientId": "269882818913-b6o0rp039qkfr54h7oblantvdf4b2kee.apps.googleusercontent.com"
     }
   }
 }

@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Crypto from 'expo-crypto';
 import Constants from 'expo-constants';
@@ -24,7 +25,10 @@ const FOLDER_CACHE_KEY = 'drive.folderCache';
 const DEVICE_ID_KEY = 'device.id';
 
 const GOOGLE_CLIENT_ID =
-  (Constants.expoConfig?.extra?.googleIosClientId as string | undefined) ??
+  (Platform.select({
+    ios: Constants.expoConfig?.extra?.googleIosClientId,
+    android: Constants.expoConfig?.extra?.googleAndroidClientId,
+  }) as string | undefined) ??
   process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID ??
   '';
 
