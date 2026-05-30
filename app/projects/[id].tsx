@@ -232,6 +232,7 @@ export default function EditProject() {
         style={{ flex: 1 }}
         contentContainerStyle={styles.scroll}
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="interactive"
         bottomOffset={theme.spacing.lg}
       >
         <Text style={styles.heading}>Edit project</Text>

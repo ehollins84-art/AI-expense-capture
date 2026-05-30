@@ -2,12 +2,12 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
@@ -308,10 +308,12 @@ export default function AddExpense() {
 
   return (
     <Screen edges={['top']}>
-      <ScrollView
+      <KeyboardAwareScrollView
         style={{ flex: 1 }}
         contentContainerStyle={styles.scroll}
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="interactive"
+        bottomOffset={120}
       >
           <View style={styles.topBar}>
             <Pressable style={styles.cancelBtn} onPress={() => router.back()}>
@@ -469,7 +471,7 @@ export default function AddExpense() {
           </View>
 
           <View style={{ height: theme.spacing.xxl }} />
-      </ScrollView>
+      </KeyboardAwareScrollView>
 
       <DatePickerModal
         visible={datePickerOpen}

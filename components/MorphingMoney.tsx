@@ -8,7 +8,7 @@ import Animated, {
   useSharedValue,
   withSpring,
 } from 'react-native-reanimated';
-import { formatMoneyCompact, moneyTextStyle } from '../lib/format';
+import { formatMoney, moneyTextStyle } from '../lib/format';
 import { theme } from '../lib/theme';
 
 const SPRING = { damping: 22, stiffness: 110, mass: 0.7 };
@@ -120,19 +120,21 @@ export function MorphingMoney({
           { color, fontSize, fontWeight: '600' as const, letterSpacing: -1 },
         ]}
       >
-        {formatMoneyCompact(amount, currency)}
+        {formatMoney(amount, currency)}
       </Text>
     );
   }
 
   const slotHeight = Math.round(fontSize * 1.15);
-  const value = Math.max(0, Math.round(amount));
-  const sig = value === 0 ? 1 : Math.floor(Math.log10(value)) + 1;
+  const totalCents = Math.max(0, Math.round(amount * 100));
+  const dollars = Math.floor(totalCents / 100);
+  const centsValue = totalCents % 100;
+  const sig = dollars === 0 ? 1 : Math.floor(Math.log10(dollars)) + 1;
 
-  const digits: number[] = [];
-  let n = value;
+  const dollarDigits: number[] = [];
+  let n = dollars;
   for (let i = 0; i < sig; i++) {
-    digits.push(n % 10);
+    dollarDigits.push(n % 10);
     n = Math.floor(n / 10);
   }
 
@@ -164,13 +166,40 @@ export function MorphingMoney({
     items.push(
       <DigitColumn
         key={`digit-${pos}`}
-        digit={digits[pos]}
+        digit={dollarDigits[pos]}
         slotHeight={slotHeight}
         fontSize={fontSize}
         color={color}
       />,
     );
   }
+
+  // Cents: decimal point + tens digit + ones digit. Always shown (even at .00)
+  // so the layout doesn't jump when crossing whole-dollar boundaries.
+  items.push(
+    <StaticGlyph
+      key="dot"
+      char="."
+      slotHeight={slotHeight}
+      fontSize={fontSize}
+      color={color}
+      animateInOut={false}
+    />,
+    <DigitColumn
+      key="cents-tens"
+      digit={Math.floor(centsValue / 10)}
+      slotHeight={slotHeight}
+      fontSize={fontSize}
+      color={color}
+    />,
+    <DigitColumn
+      key="cents-ones"
+      digit={centsValue % 10}
+      slotHeight={slotHeight}
+      fontSize={fontSize}
+      color={color}
+    />,
+  );
 
   return (
     <Animated.View

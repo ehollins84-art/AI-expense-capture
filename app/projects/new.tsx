@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
 import {
   Alert,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { useRouter } from 'expo-router';
 import { Screen } from '../../components/Screen';
 import { KeyboardAwareFooter } from '../../components/KeyboardAwareFooter';
@@ -68,10 +68,12 @@ export default function NewProject() {
 
   return (
     <Screen edges={['top']}>
-      <ScrollView
+      <KeyboardAwareScrollView
         style={{ flex: 1 }}
         contentContainerStyle={styles.scroll}
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="interactive"
+        bottomOffset={120}
       >
           <View style={styles.topBar}>
             <Pressable
@@ -149,7 +151,7 @@ export default function NewProject() {
           )}
 
           <View style={{ height: theme.spacing.xl }} />
-      </ScrollView>
+      </KeyboardAwareScrollView>
 
       <KeyboardAwareFooter>
         <Pressable

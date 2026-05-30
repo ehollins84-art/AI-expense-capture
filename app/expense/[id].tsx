@@ -221,6 +221,7 @@ export default function ExpenseDetail() {
         style={{ flex: 1 }}
         contentContainerStyle={styles.scroll}
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="interactive"
         bottomOffset={theme.spacing.lg}
       >
         <View style={styles.topBar}>
