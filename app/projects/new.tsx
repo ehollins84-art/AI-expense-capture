@@ -10,6 +10,7 @@ import {
   View,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Screen } from '../../components/Screen';
 import { Pressable } from '../../components/Pressable';
 import { useStore } from '../../lib/store';
@@ -23,6 +24,7 @@ import type { CategoryScheme } from '../../lib/types';
 
 export default function NewProject() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { addProject } = useStore();
   const [name, setName] = useState('');
   const [scheme, setScheme] = useState<CategoryScheme>('schedule_e');
@@ -68,10 +70,11 @@ export default function NewProject() {
             .filter(Boolean);
 
   return (
-    <Screen>
+    <Screen edges={['top']}>
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? -insets.bottom : 0}
       >
         <ScrollView
           contentContainerStyle={styles.scroll}
@@ -155,7 +158,12 @@ export default function NewProject() {
           <View style={{ height: theme.spacing.xl }} />
         </ScrollView>
 
-        <View style={styles.bottomBar}>
+        <View
+          style={[
+            styles.bottomBar,
+            { paddingBottom: theme.spacing.lg + insets.bottom },
+          ]}
+        >
           <Pressable
             style={styles.cta}
             hapticOnPress="light"
@@ -262,9 +270,11 @@ const styles = StyleSheet.create({
   },
   previewChipText: { ...theme.type.label, color: theme.colors.textMuted },
   bottomBar: {
-    padding: theme.spacing.lg,
+    paddingTop: theme.spacing.lg,
+    paddingHorizontal: theme.spacing.lg,
     borderTopWidth: 1,
     borderTopColor: theme.colors.border,
+    backgroundColor: theme.colors.bg,
   },
   cta: {
     backgroundColor: theme.colors.text,

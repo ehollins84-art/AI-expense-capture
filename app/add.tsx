@@ -11,6 +11,7 @@ import {
   View,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { Screen } from '../components/Screen';
@@ -42,6 +43,7 @@ const STEP_HOLD_MS = 140;
 
 export default function AddExpense() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { source } = useLocalSearchParams<{ source?: string }>();
   const { saveExpenseAndSync, projects } = useStore();
   const active = useActiveProject();
@@ -312,6 +314,7 @@ export default function AddExpense() {
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? -insets.bottom : 0}
       >
         <ScrollView
           contentContainerStyle={styles.scroll}
@@ -485,7 +488,12 @@ export default function AddExpense() {
           onDismiss={() => setDatePickerOpen(false)}
         />
 
-        <View style={styles.bottomBar}>
+        <View
+          style={[
+            styles.bottomBar,
+            { paddingBottom: theme.spacing.lg + insets.bottom },
+          ]}
+        >
           <Pressable
             style={[
               styles.lookGoodBtn,
@@ -679,7 +687,8 @@ const styles = StyleSheet.create({
   catChipTextActive: { color: '#fff' },
   amountRow: { flexDirection: 'row', alignItems: 'flex-start' },
   bottomBar: {
-    padding: theme.spacing.lg,
+    paddingTop: theme.spacing.lg,
+    paddingHorizontal: theme.spacing.lg,
     borderTopWidth: 1,
     borderTopColor: theme.colors.border,
     backgroundColor: theme.colors.bg,
