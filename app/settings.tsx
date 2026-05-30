@@ -32,6 +32,7 @@ import { listIterations, nextIterationLetter } from '../lib/storage';
 import { claudeConfigured } from '../lib/claude';
 import { haptic } from '../lib/haptics';
 import * as Clipboard from 'expo-clipboard';
+import { VersionFooter } from '../components/VersionFooter';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -458,7 +459,7 @@ export default function Settings() {
           </Section>
         )}
 
-        <View style={{ height: theme.spacing.xxl }} />
+        <VersionFooter />
       </ScrollView>
 
       <Modal
