@@ -478,7 +478,7 @@ const styles = StyleSheet.create({
   babyImage: {
     width: '100%',
     // Preserve the image's real proportions so it's never stretched or cropped.
-    aspectRatio: 782 / 517,
+    aspectRatio: 1564 / 723,
   },
   emptyState: {
     paddingTop: theme.spacing.xxl,
