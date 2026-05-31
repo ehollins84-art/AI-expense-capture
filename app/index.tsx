@@ -262,7 +262,7 @@ export default function Home() {
         ListFooterComponent={
           <View style={styles.babyFooter}>
             <Image
-              source={require('../assets/baby.png')}
+              source={require('../assets/baby_v2.png')}
               style={styles.babyImage}
               resizeMode="contain"
             />
@@ -476,9 +476,12 @@ const styles = StyleSheet.create({
     marginHorizontal: -theme.spacing.lg,
   },
   babyImage: {
+    // Pin the image frame to the full app width so the baby + its transparent
+    // padding line up with the screen edges. Height is fixed (rather than
+    // derived from aspect ratio) so the image area can never balloon to take
+    // over the screen, regardless of what dimensions the asset reports.
     width: '100%',
-    // Preserve the image's real proportions so it's never stretched or cropped.
-    aspectRatio: 1564 / 723,
+    height: 240,
   },
   emptyState: {
     paddingTop: theme.spacing.xxl,
