@@ -8,14 +8,10 @@
 name: OTA Update (production)
 
 on:
-  # Auto-publish whenever code is merged to the default branch. Pure docs
-  # changes are ignored so they don't trigger a needless release.
+  # Auto-publish whenever anything is merged to the default branch.
   push:
     branches:
       - claude/great-pascal-ty8wN
-    paths-ignore:
-      - '**/*.md'
-      - '.github/**'
   # Also allow publishing on demand from the GitHub Actions tab.
   workflow_dispatch:
     inputs:
