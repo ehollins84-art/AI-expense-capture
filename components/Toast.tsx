@@ -9,12 +9,15 @@ export function Toast({
   onHide,
   duration = 2400,
   action,
+  dismissible = false,
 }: {
   visible: boolean;
   message: string;
   onHide: () => void;
   duration?: number;
   action?: { label: string; onPress: () => void };
+  /** When true, shows a small × so the user can dismiss the toast manually. */
+  dismissible?: boolean;
 }) {
   const translate = useRef(new Animated.Value(80)).current;
   const opacity = useRef(new Animated.Value(0)).current;
@@ -86,6 +89,20 @@ export function Toast({
             <Text style={styles.actionText}>{action.label}</Text>
           </Pressable>
         )}
+        {dismissible && (
+          <Pressable
+            onPress={() => {
+              if (hideTimer.current) clearTimeout(hideTimer.current);
+              dismiss();
+            }}
+            hapticOnPress="select"
+            hitSlop={8}
+            scaleTo={1}
+            style={styles.dismiss}
+          >
+            <Text style={styles.dismissText}>×</Text>
+          </Pressable>
+        )}
       </View>
     </Animated.View>
   );
@@ -135,5 +152,16 @@ const styles = StyleSheet.create({
     color: theme.colors.accentSoft,
     fontSize: 15,
     fontWeight: '700',
+  },
+  dismiss: {
+    paddingHorizontal: 10,
+    paddingVertical: 2,
+  },
+  dismissText: {
+    color: theme.colors.bg,
+    fontSize: 20,
+    fontWeight: '500',
+    opacity: 0.7,
+    marginTop: -2,
   },
 });
