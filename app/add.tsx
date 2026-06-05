@@ -16,6 +16,7 @@ import { KeyboardAwareFooter } from '../components/KeyboardAwareFooter';
 import { Pressable } from '../components/Pressable';
 import { ExtractingState } from '../components/ExtractingState';
 import { DatePickerModal } from '../components/DatePickerModal';
+import { CategoryPromptModal } from '../components/CategoryPromptModal';
 import { BlinkingCursor } from '../components/BlinkingCursor';
 import { theme } from '../lib/theme';
 import { useStore, useActiveProject } from '../lib/store';
@@ -42,7 +43,7 @@ const STEP_HOLD_MS = 140;
 export default function AddExpense() {
   const router = useRouter();
   const { source } = useLocalSearchParams<{ source?: string }>();
-  const { saveExpenseAndSync, projects } = useStore();
+  const { saveExpenseAndSync, addProjectCategory, projects } = useStore();
   const active = useActiveProject();
   const [phase, setPhase] = useState<Phase>('picking');
   const [imageUri, setImageUri] = useState<string | null>(null);
@@ -54,6 +55,7 @@ export default function AddExpense() {
   const [amount, setAmount] = useState('');
   const [currency, setCurrency] = useState('USD');
   const [datePickerOpen, setDatePickerOpen] = useState(false);
+  const [newCatOpen, setNewCatOpen] = useState(false);
   const [reveal, setReveal] = useState<Reveal | null>(null);
 
   const pickedRef = useRef(false);
@@ -215,6 +217,25 @@ export default function AddExpense() {
       setCategory(categoriesForProject(active)[0] ?? '');
     } finally {
       setPhase('review');
+    }
+  }
+
+  // Add a category on the fly from the expense form, then select it.
+  async function handleAddCategory(name: string) {
+    if (!active) return;
+    setNewCatOpen(false);
+    try {
+      const updated = await addProjectCategory(active, name);
+      // Match the canonical stored casing/trim in case it was normalized.
+      const stored =
+        categoriesForProject(updated).find(
+          (c) => c.toLowerCase() === name.trim().toLowerCase(),
+        ) ?? name.trim();
+      setCategory(stored);
+      haptic.success();
+    } catch (e) {
+      haptic.warning();
+      Alert.alert('Couldn\'t add', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -434,6 +455,15 @@ export default function AddExpense() {
                 </Pressable>
               );
             })}
+            {/* Add a category on the fly if the one you want isn't listed. */}
+            <Pressable
+              hapticOnPress="select"
+              disabled={!!reveal}
+              onPress={() => setNewCatOpen(true)}
+              style={[styles.catChip, styles.catChipNew]}
+            >
+              <Text style={styles.catChipNewText}>+ New</Text>
+            </Pressable>
           </View>
 
           <View style={styles.amountRow}>
@@ -481,6 +511,14 @@ export default function AddExpense() {
           setDatePickerOpen(false);
         }}
         onDismiss={() => setDatePickerOpen(false)}
+      />
+
+      <CategoryPromptModal
+        visible={newCatOpen}
+        title="New category"
+        confirmLabel="Add"
+        onSubmit={handleAddCategory}
+        onDismiss={() => setNewCatOpen(false)}
       />
 
       <KeyboardAwareFooter>
@@ -674,6 +712,12 @@ const styles = StyleSheet.create({
   },
   catChipText: { ...theme.type.label, color: theme.colors.text },
   catChipTextActive: { color: '#fff' },
+  catChipNew: {
+    backgroundColor: 'transparent',
+    borderStyle: 'dashed',
+    borderColor: theme.colors.accent,
+  },
+  catChipNewText: { ...theme.type.label, color: theme.colors.accent, fontWeight: '600' },
   amountRow: { flexDirection: 'row', alignItems: 'flex-start' },
   lookGoodBtn: {
     backgroundColor: theme.colors.text,

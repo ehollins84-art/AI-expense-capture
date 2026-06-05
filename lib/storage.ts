@@ -261,6 +261,60 @@ export async function attachImageToExpense(
   return stored;
 }
 
+/**
+ * Bulk re-labels every expense in a project that currently has category `from`
+ * to category `to`. Because an expense's folder name is derived from its date
+ * and title (not its category), this never moves folders — it just rewrites the
+ * per-folder metadata and the index. Returns the expenses that changed so the
+ * caller can update in-memory state and sync them to Drive.
+ */
+export async function reassignCategory(
+  letter: string,
+  projectId: string,
+  from: string,
+  to: string,
+): Promise<Expense[]> {
+  const fromKey = from.toLowerCase();
+  const all = await readExpenses(letter);
+  const changed: Expense[] = [];
+  const next = all.map((e) => {
+    if (e.projectId === projectId && e.category.toLowerCase() === fromKey) {
+      const updated = { ...e, category: to };
+      changed.push(updated);
+      return updated;
+    }
+    return e;
+  });
+  if (changed.length === 0) return [];
+
+  for (const e of changed) {
+    const year = new Date(e.date).getFullYear();
+    const folder = `${yearDir(letter, e.projectId, year)}${expenseFolderName(e)}/`;
+    const metaText = [
+      `Title: ${e.title}`,
+      `Date: ${e.date}`,
+      `Category: ${e.category}`,
+      `Amount: ${e.currency} ${e.amount.toFixed(2)}`,
+      e.notes ? `Notes: ${e.notes}` : '',
+    ]
+      .filter(Boolean)
+      .join('\n');
+    try {
+      await FileSystem.writeAsStringAsync(`${folder}metadata.txt`, metaText);
+      await FileSystem.writeAsStringAsync(
+        `${folder}metadata.json`,
+        JSON.stringify(e, null, 2),
+      );
+    } catch {
+      // Folder may be missing (e.g. an index-only imported expense). The index
+      // write below remains the source of truth.
+    }
+  }
+
+  await writeExpenses(letter, next);
+  return changed;
+}
+
 export async function deleteProjectAndExpenses(
   letter: string,
   projectId: string,

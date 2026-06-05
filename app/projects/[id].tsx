@@ -10,27 +10,37 @@ import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Screen } from '../../components/Screen';
 import { Pressable } from '../../components/Pressable';
+import { CategoryPromptModal } from '../../components/CategoryPromptModal';
 import { useStore } from '../../lib/store';
 import { theme } from '../../lib/theme';
-import { baseCategoriesForProject, labelForScheme } from '../../lib/categories';
+import {
+  baseCategoriesForProject,
+  labelForScheme,
+  removableCategories,
+  UNCATEGORIZED,
+} from '../../lib/categories';
 import { haptic } from '../../lib/haptics';
 import type { Project } from '../../lib/types';
 
 export default function EditProject() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { projects, expenses, updateProject, removeProject } = useStore();
+  const {
+    projects,
+    expenses,
+    updateProject,
+    removeProject,
+    addProjectCategory,
+    renameProjectCategory,
+    deleteProjectCategory,
+  } = useStore();
   const project = projects.find((p) => p.id === id);
 
   const [name, setName] = useState(project?.name ?? '');
-  const [additional, setAdditional] = useState<string[]>(
-    project?.additionalCategories ?? [],
-  );
-  const [customBase, setCustomBase] = useState<string[]>(
-    project?.scheme === 'custom' ? project.customCategories ?? [] : [],
-  );
   const [newCategory, setNewCategory] = useState('');
   const [saving, setSaving] = useState(false);
+  // When set, the rename prompt is open for this existing category name.
+  const [renameTarget, setRenameTarget] = useState<string | null>(null);
 
   const expenseCount = useMemo(
     () => (project ? expenses.filter((e) => e.projectId === project.id).length : 0),
@@ -56,81 +66,76 @@ export default function EditProject() {
     );
   }
 
-  const base = baseCategoriesForProject({ ...project, customCategories: customBase });
-  const baseLowered = new Set(base.map((c) => c.toLowerCase()));
+  // Built-in tax categories shown (locked) for Schedule E/C projects.
+  const base = baseCategoriesForProject(project);
+  // The user's own categories — the only ones that can be renamed or removed.
+  const removable = removableCategories(project);
 
-  function addCategory() {
+  function usageCount(c: string): number {
+    return expenses.filter(
+      (e) => e.projectId === project!.id && e.category.toLowerCase() === c.toLowerCase(),
+    ).length;
+  }
+
+  async function handleAddCategory() {
     const trimmed = newCategory.trim();
     if (!trimmed) return;
-    if (baseLowered.has(trimmed.toLowerCase())) {
+    try {
+      await addProjectCategory(project!, trimmed);
+      setNewCategory('');
+      haptic.success();
+    } catch (e) {
       haptic.warning();
-      Alert.alert('Already there', `"${trimmed}" is already in this project's base categories.`);
-      return;
+      Alert.alert('Couldn\'t add', e instanceof Error ? e.message : String(e));
     }
-    if (project!.scheme === 'custom') {
-      if (customBase.some((c) => c.toLowerCase() === trimmed.toLowerCase())) {
-        haptic.warning();
-        Alert.alert('Already there', `"${trimmed}" is already listed.`);
-        return;
-      }
-      setCustomBase((prev) => [...prev, trimmed]);
-    } else {
-      if (additional.some((c) => c.toLowerCase() === trimmed.toLowerCase())) {
-        haptic.warning();
-        Alert.alert('Already there', `"${trimmed}" is already listed.`);
-        return;
-      }
-      setAdditional((prev) => [...prev, trimmed]);
-    }
-    setNewCategory('');
-    haptic.success();
   }
 
-  function removeAdditional(c: string) {
-    const usedCount = expenses.filter(
-      (e) => e.projectId === project!.id && e.category === c,
-    ).length;
-    if (usedCount > 0) {
-      haptic.warning();
-      Alert.alert(
-        'Category in use',
-        `${usedCount} receipt${usedCount === 1 ? '' : 's'} use "${c}". Reassign or delete those first.`,
-      );
-      return;
+  async function handleRename(from: string, to: string) {
+    setRenameTarget(null);
+    if (to.trim().toLowerCase() === from.toLowerCase()) return;
+    try {
+      await renameProjectCategory(project!, from, to);
+      haptic.success();
+    } catch (e) {
+      haptic.error();
+      Alert.alert('Couldn\'t rename', e instanceof Error ? e.message : String(e));
     }
-    setAdditional((prev) => prev.filter((x) => x !== c));
-    haptic.light();
   }
 
-  function removeCustomBase(c: string) {
-    const usedCount = expenses.filter(
-      (e) => e.projectId === project!.id && e.category === c,
-    ).length;
-    if (usedCount > 0) {
-      Alert.alert(
-        'Category in use',
-        `${usedCount} receipt${usedCount === 1 ? '' : 's'} use "${c}". Reassign or delete those first, or keep this category.`,
-      );
-      return;
-    }
-    if (customBase.length <= 1) {
-      Alert.alert('Need at least one', 'A custom project needs at least one category.');
-      return;
-    }
-    setCustomBase((prev) => prev.filter((x) => x !== c));
-    haptic.light();
+  function confirmRemoveCategory(c: string) {
+    const used = usageCount(c);
+    const message =
+      used > 0
+        ? `${used} receipt${used === 1 ? '' : 's'} use "${c}". They'll be moved to ${UNCATEGORIZED}.`
+        : `Remove "${c}" from this project?`;
+    Alert.alert('Remove category?', message, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Remove',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await deleteProjectCategory(project!, c);
+            haptic.warning();
+          } catch (e) {
+            haptic.error();
+            Alert.alert(
+              'Couldn\'t remove',
+              e instanceof Error ? e.message : String(e),
+            );
+          }
+        },
+      },
+    ]);
   }
 
   async function handleSave() {
     if (!project) return;
     setSaving(true);
     try {
-      const next: Project = {
-        ...project,
-        name: name.trim(),
-        customCategories: project.scheme === 'custom' ? customBase : project.customCategories,
-        additionalCategories: project.scheme === 'custom' ? undefined : additional,
-      };
+      // Categories are persisted immediately as they're edited; here we only
+      // commit any change to the project name.
+      const next: Project = { ...project, name: name.trim() };
       await updateProject(next);
       haptic.success();
       router.back();
@@ -251,7 +256,7 @@ export default function EditProject() {
             <Text style={styles.schemeLabel}>{labelForScheme(project.scheme)}</Text>
             <Text style={styles.schemeHint}>
               The category set is locked in when a project is created. You can
-              add extra categories below.
+              manage your own categories below.
             </Text>
           </View>
 
@@ -272,47 +277,40 @@ export default function EditProject() {
             </>
           )}
 
-          {project.scheme === 'custom' && (
-            <>
-              <Text style={styles.fieldLabel}>Categories</Text>
-              <View style={styles.chipWrap}>
-                {customBase.map((c) => (
-                  <Pressable
-                    key={c}
-                    onPress={() => removeCustomBase(c)}
-                    hapticOnPress="none"
-                    scaleTo={1}
-                    style={[styles.chip, styles.chipRemovable]}
-                  >
-                    <Text style={styles.chipRemovableText}>{c}</Text>
-                    <Text style={styles.chipRemoveGlyph}>  ×</Text>
-                  </Pressable>
-                ))}
+          <Text style={[styles.fieldLabel, { marginTop: theme.spacing.lg }]}>
+            Your categories
+          </Text>
+          <View style={styles.chipWrap}>
+            {removable.map((c) => (
+              <View key={c} style={[styles.chip, styles.chipRemovable]}>
+                {/* Tap the label to rename; tap the × to remove. */}
+                <Pressable
+                  onPress={() => setRenameTarget(c)}
+                  hapticOnPress="select"
+                  scaleTo={1}
+                  hitSlop={6}
+                >
+                  <Text style={styles.chipRemovableText}>{c}</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => confirmRemoveCategory(c)}
+                  hapticOnPress="none"
+                  scaleTo={1}
+                  hitSlop={8}
+                >
+                  <Text style={styles.chipRemoveGlyph}>  ×</Text>
+                </Pressable>
               </View>
-            </>
-          )}
-
-          {project.scheme !== 'custom' && additional.length > 0 && (
-            <>
-              <Text style={[styles.fieldLabel, { marginTop: theme.spacing.lg }]}>
-                Your additions
-              </Text>
-              <View style={styles.chipWrap}>
-                {additional.map((c) => (
-                  <Pressable
-                    key={c}
-                    onPress={() => removeAdditional(c)}
-                    hapticOnPress="none"
-                    scaleTo={1}
-                    style={[styles.chip, styles.chipRemovable]}
-                  >
-                    <Text style={styles.chipRemovableText}>{c}</Text>
-                    <Text style={styles.chipRemoveGlyph}>  ×</Text>
-                  </Pressable>
-                ))}
-              </View>
-            </>
-          )}
+            ))}
+            {/* Uncategorized is always present and can't be removed. */}
+            <View style={[styles.chip, styles.chipLocked]}>
+              <Text style={styles.chipLockedText}>{UNCATEGORIZED}</Text>
+            </View>
+          </View>
+          <Text style={styles.helperText}>
+            Tap a category to rename it, or × to remove it. Removing a category
+            moves its receipts to {UNCATEGORIZED}.
+          </Text>
 
           <Text style={[styles.fieldLabel, { marginTop: theme.spacing.lg }]}>
             Add a category
@@ -324,13 +322,13 @@ export default function EditProject() {
               placeholder="e.g. Software"
               placeholderTextColor={theme.colors.textSubtle}
               style={[styles.input, { flex: 1 }]}
-              onSubmitEditing={addCategory}
+              onSubmitEditing={handleAddCategory}
               returnKeyType="done"
             />
             <Pressable
               style={styles.addBtn}
               hapticOnPress="light"
-              onPress={addCategory}
+              onPress={handleAddCategory}
             >
               <Text style={styles.addBtnText}>Add</Text>
             </Pressable>
@@ -352,6 +350,15 @@ export default function EditProject() {
 
         <View style={{ height: theme.spacing.xxl }} />
       </KeyboardAwareScrollView>
+
+      <CategoryPromptModal
+        visible={renameTarget !== null}
+        title="Rename category"
+        confirmLabel="Rename"
+        initialValue={renameTarget ?? ''}
+        onSubmit={(to) => renameTarget && handleRename(renameTarget, to)}
+        onDismiss={() => setRenameTarget(null)}
+      />
     </Screen>
   );
 }

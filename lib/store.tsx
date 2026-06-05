@@ -20,7 +20,16 @@ import {
   updateExpense as updateExpenseFs,
   deleteProjectAndExpenses,
   attachImageToExpense as attachImageToExpenseFs,
+  reassignCategory,
+  imagePathForExpense,
 } from './storage';
+import {
+  UNCATEGORIZED,
+  isProtectedCategory,
+  addCategoryToProject,
+  renameCategoryInProject,
+  deleteCategoryFromProject,
+} from './categories';
 import {
   getStoredIteration,
   isConnected,
@@ -52,6 +61,13 @@ type StoreCtx = StoreState & {
   ) => Promise<Project>;
   updateProject: (project: Project) => Promise<Project>;
   removeProject: (project: Project) => Promise<void>;
+  addProjectCategory: (project: Project, name: string) => Promise<Project>;
+  renameProjectCategory: (
+    project: Project,
+    from: string,
+    to: string,
+  ) => Promise<Project>;
+  deleteProjectCategory: (project: Project, name: string) => Promise<Project>;
   saveExpenseAndSync: (
     expense: Omit<Expense, 'id' | 'createdAt' | 'imageFilename'>,
     imageUri: string | null,
@@ -198,6 +214,68 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     [iteration, activeProjectId, setActiveProject],
   );
 
+  // Push a batch of category-relabelled expenses into in-memory state and,
+  // when connected, sync each one to Drive in the background (best-effort).
+  const applyReassigned = useCallback(
+    async (project: Project, changed: Expense[], previousLabel: string) => {
+      if (changed.length === 0) return;
+      const byId = new Map(changed.map((e) => [e.id, e]));
+      setExpenses((prev) => prev.map((e) => byId.get(e.id) ?? e));
+      if (await isConnected()) {
+        for (const e of changed) {
+          const old: Expense = { ...e, category: previousLabel };
+          const imageUri = await imagePathForExpense(iteration, e);
+          syncExpenseEdit(iteration, project, old, e, imageUri).catch((err) =>
+            console.warn('Drive edit sync failed:', err),
+          );
+        }
+      }
+    },
+    [iteration],
+  );
+
+  const addProjectCategory = useCallback(
+    async (project: Project, name: string): Promise<Project> => {
+      // addCategoryToProject validates (empty / duplicate / reserved name).
+      const next = addCategoryToProject(project, name);
+      return updateProject(next);
+    },
+    [updateProject],
+  );
+
+  const renameProjectCategory = useCallback(
+    async (project: Project, from: string, to: string): Promise<Project> => {
+      const nextProject = renameCategoryInProject(project, from, to);
+      const updated = await updateProject(nextProject);
+      // Move every receipt that used the old label onto the new one.
+      const changed = await reassignCategory(iteration, project.id, from, to);
+      await applyReassigned(updated, changed, from);
+      return updated;
+    },
+    [updateProject, iteration, applyReassigned],
+  );
+
+  const deleteProjectCategory = useCallback(
+    async (project: Project, name: string): Promise<Project> => {
+      if (isProtectedCategory(name)) {
+        throw new Error(`"${UNCATEGORIZED}" can't be removed.`);
+      }
+      // Re-home any receipts on this category before dropping it, so nothing is
+      // ever orphaned.
+      const changed = await reassignCategory(
+        iteration,
+        project.id,
+        name,
+        UNCATEGORIZED,
+      );
+      const nextProject = deleteCategoryFromProject(project, name);
+      const updated = await updateProject(nextProject);
+      await applyReassigned(updated, changed, name);
+      return updated;
+    },
+    [updateProject, iteration, applyReassigned],
+  );
+
   const saveExpenseAndSync = useCallback(
     async (
       input: Omit<Expense, 'id' | 'createdAt' | 'imageFilename'>,
@@ -309,6 +387,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       addProject,
       updateProject,
       removeProject,
+      addProjectCategory,
+      renameProjectCategory,
+      deleteProjectCategory,
       saveExpenseAndSync,
       updateExpense,
       attachImage,
@@ -327,6 +408,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       addProject,
       updateProject,
       removeProject,
+      addProjectCategory,
+      renameProjectCategory,
+      deleteProjectCategory,
       saveExpenseAndSync,
       updateExpense,
       attachImage,

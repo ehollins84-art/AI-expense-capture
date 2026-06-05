@@ -873,6 +873,7 @@ export async function importIteration(
             name: parsed.name,
             scheme: parsed.scheme,
             customCategories: parsed.customCategories,
+            additionalCategories: parsed.additionalCategories,
             createdAt: parsed.createdAt ?? new Date().toISOString(),
           };
         }
@@ -1045,6 +1046,7 @@ async function readProjectFromDrive(
       name: parsed.name,
       scheme: parsed.scheme,
       customCategories: parsed.customCategories,
+      additionalCategories: parsed.additionalCategories,
       createdAt: parsed.createdAt ?? new Date().toISOString(),
     };
   } catch {

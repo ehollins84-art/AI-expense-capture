@@ -21,6 +21,7 @@ import { imagePathForExpense } from '../../lib/storage';
 import { categoriesForProject } from '../../lib/categories';
 import { haptic } from '../../lib/haptics';
 import { DatePickerModal } from '../../components/DatePickerModal';
+import { CategoryPromptModal } from '../../components/CategoryPromptModal';
 import { ReceiptLightbox } from '../../components/ReceiptLightbox';
 import { queuePendingDelete } from '../../lib/pendingDelete';
 import { signalExpenseDeleted } from '../../lib/uiSignals';
@@ -32,13 +33,21 @@ type EditField = 'amount' | 'title' | 'category' | null;
 export default function ExpenseDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { expenses, iteration, removeExpense, updateExpense, attachImage, projects } =
-    useStore();
+  const {
+    expenses,
+    iteration,
+    removeExpense,
+    updateExpense,
+    attachImage,
+    addProjectCategory,
+    projects,
+  } = useStore();
   const expense = expenses.find((e) => e.id === id);
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [editing, setEditing] = useState<EditField>(null);
   const [datePickerOpen, setDatePickerOpen] = useState(false);
   const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [newCatOpen, setNewCatOpen] = useState(false);
   const [draft, setDraft] = useState({
     title: '',
     date: '',
@@ -154,6 +163,31 @@ export default function ExpenseDetail() {
         amount: expense.amount.toString(),
         currency: expense.currency,
       });
+    }
+  }
+
+  // Add a category on the fly from the edit screen, then apply it to this
+  // receipt.
+  async function handleAddCategory(name: string) {
+    setNewCatOpen(false);
+    if (!expense || !project) return;
+    try {
+      const updated = await addProjectCategory(project, name);
+      const stored =
+        categoriesForProject(updated).find(
+          (c) => c.toLowerCase() === name.trim().toLowerCase(),
+        ) ?? name.trim();
+      setDraft((d) => ({ ...d, category: stored }));
+      const next: Expense = { ...expense, category: stored };
+      const result = await updateExpense(next);
+      const p = await imagePathForExpense(iteration, result);
+      setImageUri(`${p}?t=${Date.now()}`);
+      haptic.light();
+      flash('category');
+      setEditing(null);
+    } catch (e) {
+      haptic.error();
+      Alert.alert('Couldn\'t add', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -458,6 +492,14 @@ export default function ExpenseDetail() {
                     </Text>
                   </Pressable>
                 ))}
+                {/* Add a category on the fly if it isn't listed. */}
+                <Pressable
+                  hapticOnPress="select"
+                  onPress={() => setNewCatOpen(true)}
+                  style={[styles.catChip, styles.catChipNew]}
+                >
+                  <Text style={styles.catChipNewText}>+ New</Text>
+                </Pressable>
               </View>
             )}
 
@@ -533,6 +575,14 @@ export default function ExpenseDetail() {
             });
         }}
         onDismiss={() => setDatePickerOpen(false)}
+      />
+
+      <CategoryPromptModal
+        visible={newCatOpen}
+        title="New category"
+        confirmLabel="Add"
+        onSubmit={handleAddCategory}
+        onDismiss={() => setNewCatOpen(false)}
       />
 
       <ReceiptLightbox
@@ -648,6 +698,12 @@ const styles = StyleSheet.create({
   },
   catChipText: { ...theme.type.label, color: theme.colors.text },
   catChipTextActive: { color: '#fff' },
+  catChipNew: {
+    backgroundColor: 'transparent',
+    borderStyle: 'dashed',
+    borderColor: theme.colors.accent,
+  },
+  catChipNewText: { ...theme.type.label, color: theme.colors.accent, fontWeight: '600' },
   thumbWrap: {
     alignItems: 'center',
     marginTop: theme.spacing.xl,
