@@ -1,0 +1,59 @@
+# Ships an over-the-air (OTA) update to the existing TestFlight / production
+# build whenever changes land on the main branch. This runs on GitHub's
+# servers, which (unlike the Claude Code web sessions) can reach Expo's
+# servers, so publishing "just works" with no manual token handling.
+#
+# One-time setup: add a repository secret named EXPO_TOKEN
+# (Settings → Secrets and variables → Actions → New repository secret).
+name: OTA Update (production)
+
+on:
+  # Auto-publish whenever code is merged to the default branch. Pure docs
+  # changes are ignored so they don't trigger a needless release.
+  push:
+    branches:
+      - claude/great-pascal-ty8wN
+    paths-ignore:
+      - '**/*.md'
+      - '.github/**'
+  # Also allow publishing on demand from the GitHub Actions tab.
+  workflow_dispatch:
+    inputs:
+      message:
+        description: 'Update message shown in EAS'
+        required: false
+        default: 'Manual OTA update'
+
+# Never run two publishes at once; cancel an in-flight one if a newer push lands.
+concurrency:
+  group: ota-update
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Set up EAS CLI
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Publish OTA update to the production channel
+        run: |
+          eas update \
+            --channel production \
+            --message "${{ github.event.inputs.message || github.event.head_commit.message }}" \
+            --non-interactive
