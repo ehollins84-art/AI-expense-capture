@@ -8,7 +8,11 @@
 name: iOS Build (TestFlight)
 
 on:
+  # Trigger a build by pushing the `claude/ios-build` branch (or a `build-*`
+  # tag), or from the Actions tab via Run workflow.
   push:
+    branches:
+      - claude/ios-build
     tags:
       - 'build-*'
   workflow_dispatch:
