@@ -1,6 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
+  KeyboardAvoidingView,
   Modal,
+  Platform,
+  Pressable as RNPressable,
   StyleSheet,
   Text,
   TextInput,
@@ -58,10 +61,18 @@ export function CategoryPromptModal({
       transparent
       animationType="fade"
       onRequestClose={onDismiss}
+      statusBarTranslucent
     >
-      <Pressable style={styles.scrim} onPress={onDismiss} scaleTo={1}>
-        <Pressable style={styles.card} onPress={() => {}} scaleTo={1}>
-          <Text style={styles.title}>{title}</Text>
+      {/* KeyboardAvoidingView lifts the centered card above the keyboard, and
+          plain RN Pressables give the backdrop a real full-screen size (the
+          custom Pressable wraps content in a non-flex layer that collapses). */}
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <RNPressable style={styles.scrim} onPress={onDismiss}>
+          <RNPressable style={styles.card} onPress={() => {}}>
+            <Text style={styles.title}>{title}</Text>
           <TextInput
             ref={inputRef}
             value={value}
@@ -91,13 +102,15 @@ export function CategoryPromptModal({
               <Text style={styles.btnPrimaryText}>{confirmLabel}</Text>
             </Pressable>
           </View>
-        </Pressable>
-      </Pressable>
+          </RNPressable>
+        </RNPressable>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
+  flex: { flex: 1 },
   scrim: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.4)',

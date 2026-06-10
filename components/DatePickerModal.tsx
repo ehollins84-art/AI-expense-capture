@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import {
   Modal,
   Platform,
+  Pressable as RNPressable,
   StyleSheet,
   Text,
   View,
@@ -68,16 +69,11 @@ export function DatePickerModal({
       animationType="fade"
       onRequestClose={onDismiss}
     >
-      <Pressable
-        style={styles.scrim}
-        onPress={onDismiss}
-        scaleTo={1}
-      >
-        <Pressable
-          style={styles.card}
-          onPress={() => {}}
-          scaleTo={1}
-        >
+      {/* Plain RN Pressables so the backdrop fills the screen and the card
+          anchors to the bottom; the custom Pressable's animation wrapper has no
+          flex and collapses the modal. */}
+      <RNPressable style={styles.scrim} onPress={onDismiss}>
+        <RNPressable style={styles.card} onPress={() => {}}>
           <View style={styles.handle} />
           <DateTimePicker
             value={value}
@@ -106,8 +102,8 @@ export function DatePickerModal({
               <Text style={styles.btnPrimaryText}>Done</Text>
             </Pressable>
           </View>
-        </Pressable>
-      </Pressable>
+        </RNPressable>
+      </RNPressable>
     </Modal>
   );
 }
