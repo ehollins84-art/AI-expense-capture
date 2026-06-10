@@ -1,0 +1,40 @@
+# Builds BOTH iOS and Android from the same commit and submits each to its
+# store track (TestFlight + Google Play internal). This is the everyday "ship a
+# new native build" button — use it whenever native code changes so both
+# platforms stay in lockstep. Trigger by pushing the `claude/build` branch, or
+# from the Actions tab.
+#
+# Per-platform workflows (ios-build / android-build) still exist for the rare
+# case you need just one side.
+name: Build All (iOS + Android)
+
+on:
+  push:
+    branches:
+      - claude/build
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Set up EAS CLI
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build and submit both platforms
+        run: eas build --platform all --profile production --non-interactive --auto-submit

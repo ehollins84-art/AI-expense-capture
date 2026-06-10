@@ -1,0 +1,36 @@
+# Submits the most recent finished Android build to the Google Play internal
+# track, without rebuilding. Useful when a build already exists on EAS and only
+# the submission needs to (re)run. Trigger by pushing the `claude/android-submit`
+# branch, or from the Actions tab.
+name: Android Submit (Play internal)
+
+on:
+  push:
+    branches:
+      - claude/android-submit
+  workflow_dispatch:
+
+jobs:
+  submit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Set up EAS CLI
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Submit latest build to Play internal track
+        run: eas submit --platform android --latest --profile production --non-interactive
