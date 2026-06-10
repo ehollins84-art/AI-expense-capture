@@ -26,6 +26,7 @@ import {
 import {
   UNCATEGORIZED,
   isProtectedCategory,
+  categoriesForProject,
   addCategoryToProject,
   renameCategoryInProject,
   deleteCategoryFromProject,
@@ -73,6 +74,7 @@ type StoreCtx = StoreState & {
     imageUri: string | null,
   ) => Promise<Expense>;
   updateExpense: (expense: Expense) => Promise<Expense>;
+  moveExpense: (expense: Expense, toProjectId: string) => Promise<Expense>;
   attachImage: (expense: Expense, imageUri: string) => Promise<Expense>;
   removeExpense: (expense: Expense) => Promise<void>;
   refresh: () => Promise<void>;
@@ -338,6 +340,38 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     [expenses, projects, iteration],
   );
 
+  const moveExpense = useCallback(
+    async (expense: Expense, toProjectId: string): Promise<Expense> => {
+      if (expense.projectId === toProjectId) return expense;
+      const dest = projects.find((p) => p.id === toProjectId);
+      if (!dest) throw new Error('That project no longer exists.');
+      // Keep the category if the destination offers it; otherwise the receipt
+      // lands in the destination's always-present Uncategorized bucket.
+      const destCats = categoriesForProject(dest).map((c) => c.toLowerCase());
+      const category = destCats.includes(expense.category.toLowerCase())
+        ? expense.category
+        : UNCATEGORIZED;
+      const old = expense;
+      const next: Expense = { ...old, projectId: toProjectId, category };
+      // Moves the receipt's folder into the destination project on disk.
+      const stored = await updateExpenseFs(iteration, old, next);
+      setExpenses((prev) => prev.map((e) => (e.id === stored.id ? stored : e)));
+
+      if (await isConnected()) {
+        const fromProj = projects.find((p) => p.id === old.projectId);
+        const imageUri = await imagePathForExpense(iteration, stored);
+        // Remove from the old project's Drive folder, then add to the new one
+        // so the receipt isn't left orphaned in both. Best-effort.
+        (async () => {
+          if (fromProj) await deleteExpenseFromDrive(iteration, fromProj, old);
+          await uploadExpenseToDrive(iteration, dest, stored, imageUri);
+        })().catch((err) => console.warn('Drive move sync failed:', err));
+      }
+      return stored;
+    },
+    [projects, iteration],
+  );
+
   const attachImage = useCallback(
     async (expense: Expense, imageUri: string): Promise<Expense> => {
       const stored = await attachImageToExpenseFs(iteration, expense, imageUri);
@@ -392,6 +426,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       deleteProjectCategory,
       saveExpenseAndSync,
       updateExpense,
+      moveExpense,
       attachImage,
       removeExpense,
       refresh,
@@ -413,6 +448,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       deleteProjectCategory,
       saveExpenseAndSync,
       updateExpense,
+      moveExpense,
       attachImage,
       removeExpense,
       refresh,

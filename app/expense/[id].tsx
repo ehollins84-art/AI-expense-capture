@@ -28,7 +28,7 @@ import { signalExpenseDeleted } from '../../lib/uiSignals';
 import { ensureCameraPermission, ensureLibraryPermission } from '../../lib/permissions';
 import type { Expense } from '../../lib/types';
 
-type EditField = 'amount' | 'title' | 'category' | null;
+type EditField = 'amount' | 'title' | 'category' | 'project' | null;
 
 export default function ExpenseDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -38,6 +38,7 @@ export default function ExpenseDetail() {
     iteration,
     removeExpense,
     updateExpense,
+    moveExpense,
     attachImage,
     addProjectCategory,
     projects,
@@ -60,9 +61,10 @@ export default function ExpenseDetail() {
     title: new Animated.Value(0),
     date: new Animated.Value(0),
     category: new Animated.Value(0),
+    project: new Animated.Value(0),
   }).current;
 
-  function flash(field: 'amount' | 'title' | 'date' | 'category') {
+  function flash(field: 'amount' | 'title' | 'date' | 'category' | 'project') {
     const v = flashAnims[field];
     Animated.sequence([
       Animated.timing(v, { toValue: 1, duration: 160, useNativeDriver: false }),
@@ -188,6 +190,30 @@ export default function ExpenseDetail() {
     } catch (e) {
       haptic.error();
       Alert.alert('Couldn\'t add', e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  // Move this receipt to a different project. Its folder moves on disk and in
+  // Drive; if the new project doesn't have the receipt's category, it becomes
+  // Uncategorized there.
+  async function handleMove(toProjectId: string) {
+    if (!expense) return;
+    if (toProjectId === expense.projectId) {
+      setEditing(null);
+      return;
+    }
+    const prevCategory = expense.category;
+    try {
+      const stored = await moveExpense(expense, toProjectId);
+      const p = await imagePathForExpense(iteration, stored);
+      setImageUri(p ? `${p}?t=${Date.now()}` : null);
+      haptic.light();
+      flash('project');
+      if (stored.category !== prevCategory) flash('category');
+      setEditing(null);
+    } catch (e) {
+      haptic.error();
+      Alert.alert('Couldn\'t move', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -508,8 +534,72 @@ export default function ExpenseDetail() {
                 <View style={styles.rowDivider} />
                 <View style={styles.row}>
                   <Text style={styles.rowLabel}>Project</Text>
-                  <Text style={styles.rowValue}>{project.name}</Text>
+                  {projects.length > 1 ? (
+                    editing === 'project' ? (
+                      <Pressable
+                        onPress={() => setEditing(null)}
+                        hapticOnPress="select"
+                        scaleTo={1}
+                      >
+                        <Text style={[styles.rowValue, { color: theme.colors.accent }]}>
+                          Done
+                        </Text>
+                      </Pressable>
+                    ) : (
+                      <Pressable
+                        onPress={() => {
+                          haptic.select();
+                          setEditing('project');
+                        }}
+                        scaleTo={1}
+                      >
+                        <Animated.View
+                          style={{
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            paddingHorizontal: 6,
+                            paddingVertical: 2,
+                            borderRadius: 6,
+                            backgroundColor: flashAnims.project.interpolate({
+                              inputRange: [0, 1],
+                              outputRange: ['transparent', theme.colors.accentSoft],
+                            }),
+                          }}
+                        >
+                          <Text style={styles.rowValue}>{project.name}</Text>
+                          <Text style={styles.editGlyphInline}>  ›</Text>
+                        </Animated.View>
+                      </Pressable>
+                    )
+                  ) : (
+                    <Text style={styles.rowValue}>{project.name}</Text>
+                  )}
                 </View>
+
+                {editing === 'project' && (
+                  <View style={styles.categoryGrid}>
+                    {projects.map((p) => (
+                      <Pressable
+                        key={p.id}
+                        hapticOnPress="select"
+                        onPress={() => handleMove(p.id)}
+                        style={[
+                          styles.catChip,
+                          p.id === expense.projectId && styles.catChipActive,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.catChipText,
+                            p.id === expense.projectId && styles.catChipTextActive,
+                          ]}
+                        >
+                          {p.name}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                )}
               </>
             )}
           </View>
