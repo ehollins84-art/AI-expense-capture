@@ -1,0 +1,36 @@
+# Submits the most recent finished iOS build to TestFlight, without rebuilding.
+# Useful when a build already exists on EAS and only the submission needs to
+# run (e.g. after wiring up submit credentials). Trigger by pushing the
+# `claude/ios-submit` branch, or from the Actions tab (Run workflow).
+name: iOS Submit (TestFlight)
+
+on:
+  push:
+    branches:
+      - claude/ios-submit
+  workflow_dispatch:
+
+jobs:
+  submit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Set up EAS CLI
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Submit latest build to TestFlight
+        run: eas submit --platform ios --latest --profile production --non-interactive
