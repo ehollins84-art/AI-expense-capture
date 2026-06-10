@@ -1,6 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Animated,
+  Easing,
   FlatList,
   Modal,
   Pressable as RNPressable,
@@ -18,6 +20,9 @@ import { ensureMediaLibraryReadPermission } from '../lib/permissions';
 
 const RECENT_COUNT = 24;
 const TILE = 96;
+
+// Lets us animate the backdrop's opacity independently of the sliding card.
+const AnimatedPressable = Animated.createAnimatedComponent(RNPressable);
 
 /**
  * A Gemini-style "add a receipt" bottom sheet. Tapping the capture button
@@ -46,6 +51,41 @@ export function ImportSheet({
   );
   const [loading, setLoading] = useState(false);
   const [resolving, setResolving] = useState(false);
+
+  // Animation: the backdrop fades while only the card slides up from the
+  // bottom, instead of sliding the whole gray overlay (which looked jarring).
+  // `render` keeps the modal mounted long enough to play the closing slide.
+  const [render, setRender] = useState(visible);
+  const [sheetH, setSheetH] = useState(0);
+  const anim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (visible) {
+      setRender(true);
+      Animated.timing(anim, {
+        toValue: 1,
+        duration: 240,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }).start();
+    } else {
+      Animated.timing(anim, {
+        toValue: 0,
+        duration: 180,
+        easing: Easing.in(Easing.cubic),
+        useNativeDriver: true,
+      }).start(({ finished }) => {
+        if (finished) setRender(false);
+      });
+    }
+  }, [visible, anim]);
+
+  // Card starts one card-height below the screen and rises to rest. Falls back
+  // to a sensible offset until the card has measured its own height.
+  const translateY = anim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [sheetH || 420, 0],
+  });
 
   // Load recent photos each time the sheet opens.
   useEffect(() => {
@@ -97,16 +137,23 @@ export function ImportSheet({
 
   return (
     <Modal
-      visible={visible}
+      visible={render}
       transparent
-      animationType="slide"
+      animationType="none"
       onRequestClose={onClose}
+      statusBarTranslucent
     >
-      {/* Plain RN Pressables so the backdrop fills the screen (flex:1) and the
-          card anchors to the bottom. Tapping the backdrop closes; tapping the
-          card is swallowed so it stays open. */}
-      <RNPressable style={styles.scrim} onPress={onClose}>
-        <RNPressable style={styles.card} onPress={() => {}}>
+      <View style={styles.root}>
+        {/* Backdrop fades in/out; tapping it closes the sheet. */}
+        <AnimatedPressable
+          style={[styles.scrim, { opacity: anim }]}
+          onPress={onClose}
+        />
+        {/* Only the card slides up; it measures its own height for the slide. */}
+        <Animated.View
+          style={[styles.card, { transform: [{ translateY }] }]}
+          onLayout={(e) => setSheetH(e.nativeEvent.layout.height)}
+        >
           <View style={styles.handle} />
           <Text style={styles.title}>Add a receipt</Text>
 
@@ -177,17 +224,20 @@ export function ImportSheet({
               <Text style={styles.actionText}>Enter manually</Text>
             </Pressable>
           </View>
-        </RNPressable>
-      </RNPressable>
+        </Animated.View>
+      </View>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  scrim: {
+  root: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
     justifyContent: 'flex-end',
+  },
+  scrim: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.4)',
   },
   card: {
     backgroundColor: theme.colors.surface,

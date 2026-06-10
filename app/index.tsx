@@ -176,7 +176,18 @@ export default function Home() {
             return (
               <Pressable
                 hapticOnPress="select"
-                onPress={() => setActiveProject(item.id)}
+                // Tapping the active project again opens its editor (rename,
+                // manage categories, delete); tapping another selects it.
+                onPress={() => {
+                  if (isActive) {
+                    router.push({
+                      pathname: '/projects/[id]',
+                      params: { id: item.id },
+                    });
+                  } else {
+                    setActiveProject(item.id);
+                  }
+                }}
                 style={[
                   styles.projectChip,
                   isActive && styles.projectChipActive,
@@ -190,6 +201,7 @@ export default function Home() {
                   ]}
                 >
                   {item.name}
+                  {isActive ? '  ›' : ''}
                 </Text>
               </Pressable>
             );

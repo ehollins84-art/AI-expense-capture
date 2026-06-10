@@ -102,6 +102,19 @@ export default function EditProject() {
     }
   }
 
+  // Tapping one of the user's own categories offers to rename or delete it.
+  function openCategoryOptions(c: string) {
+    Alert.alert(c, undefined, [
+      { text: 'Rename', onPress: () => setRenameTarget(c) },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: () => confirmRemoveCategory(c),
+      },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  }
+
   function confirmRemoveCategory(c: string) {
     const used = usageCount(c);
     const message =
@@ -282,25 +295,17 @@ export default function EditProject() {
           </Text>
           <View style={styles.chipWrap}>
             {removable.map((c) => (
-              <View key={c} style={[styles.chip, styles.chipRemovable]}>
-                {/* Tap the label to rename; tap the × to remove. */}
-                <Pressable
-                  onPress={() => setRenameTarget(c)}
-                  hapticOnPress="select"
-                  scaleTo={1}
-                  hitSlop={6}
-                >
-                  <Text style={styles.chipRemovableText}>{c}</Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => confirmRemoveCategory(c)}
-                  hapticOnPress="none"
-                  scaleTo={1}
-                  hitSlop={8}
-                >
-                  <Text style={styles.chipRemoveGlyph}>  ×</Text>
-                </Pressable>
-              </View>
+              // Tap a category to open Rename / Delete options.
+              <Pressable
+                key={c}
+                onPress={() => openCategoryOptions(c)}
+                hapticOnPress="select"
+                scaleTo={1}
+                style={[styles.chip, styles.chipRemovable]}
+              >
+                <Text style={styles.chipRemovableText}>{c}</Text>
+                <Text style={styles.chipRemoveGlyph}>  ⋯</Text>
+              </Pressable>
             ))}
             {/* Uncategorized is always present and can't be removed. */}
             <View style={[styles.chip, styles.chipLocked]}>
@@ -308,8 +313,8 @@ export default function EditProject() {
             </View>
           </View>
           <Text style={styles.helperText}>
-            Tap a category to rename it, or × to remove it. Removing a category
-            moves its receipts to {UNCATEGORIZED}.
+            Tap a category to rename or remove it. Removing a category moves its
+            receipts to {UNCATEGORIZED}.
           </Text>
 
           <Text style={[styles.fieldLabel, { marginTop: theme.spacing.lg }]}>
