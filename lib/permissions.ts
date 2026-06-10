@@ -1,5 +1,6 @@
 import { Alert, Linking } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import * as MediaLibrary from 'expo-media-library';
 
 // Wraps the ImagePicker permission flow with a friendly fallback:
 //  - First call ever → iOS shows its native prompt
@@ -35,6 +36,25 @@ export async function ensureLibraryPermission(): Promise<boolean> {
     'Manila needs access to your photos to import existing receipts. Tap Open Settings and turn Photos on.',
   );
   return false;
+}
+
+/**
+ * Read-only access to the photo library, used to show recent-photo thumbnails
+ * in the import sheet. Returns true if we can read photos (full or limited
+ * access on iOS). Never throws.
+ */
+export async function ensureMediaLibraryReadPermission(): Promise<boolean> {
+  try {
+    const current = await MediaLibrary.getPermissionsAsync();
+    if (current.granted || current.accessPrivileges === 'limited') return true;
+    if (current.canAskAgain) {
+      const result = await MediaLibrary.requestPermissionsAsync();
+      if (result.granted || result.accessPrivileges === 'limited') return true;
+    }
+    return false;
+  } catch {
+    return false;
+  }
 }
 
 function promptOpenSettings(title: string, message: string) {

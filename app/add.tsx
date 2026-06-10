@@ -42,7 +42,10 @@ const STEP_HOLD_MS = 140;
 
 export default function AddExpense() {
   const router = useRouter();
-  const { source } = useLocalSearchParams<{ source?: string }>();
+  const { source, imageUri: pickedImageUri } = useLocalSearchParams<{
+    source?: string;
+    imageUri?: string;
+  }>();
   const { saveExpenseAndSync, addProjectCategory, projects } = useStore();
   const active = useActiveProject();
   const [phase, setPhase] = useState<Phase>('picking');
@@ -70,6 +73,13 @@ export default function AddExpense() {
           setCategory(categoriesForProject(active)[0] ?? '');
         }
         setPhase('review');
+        return;
+      }
+      // A photo was already chosen in the import sheet — skip the picker and
+      // go straight to extraction.
+      if (source === 'picked' && pickedImageUri) {
+        setImageUri(pickedImageUri);
+        await runExtraction(pickedImageUri);
         return;
       }
       try {

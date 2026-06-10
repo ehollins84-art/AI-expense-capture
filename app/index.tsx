@@ -12,7 +12,8 @@ import { Link, useRouter, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Screen } from '../components/Screen';
 import { Pressable } from '../components/Pressable';
-import { FabDial } from '../components/FabDial';
+import { CaptureFab } from '../components/CaptureFab';
+import { ImportSheet } from '../components/ImportSheet';
 import { MorphingMoney } from '../components/MorphingMoney';
 import { MagnifyingGlassIcon } from '../components/MagnifyingGlassIcon';
 import { useStore, useActiveProject } from '../lib/store';
@@ -36,6 +37,7 @@ export default function Home() {
   const [year, setYear] = useState<number>(new Date().getFullYear());
   const [refreshing, setRefreshing] = useState(false);
   const [, setPendingTick] = useState(0);
+  const [importOpen, setImportOpen] = useState(false);
 
   useFocusEffect(
     React.useCallback(() => {
@@ -284,15 +286,33 @@ export default function Home() {
         )}
       />
 
-      <FabDial
+      <CaptureFab
         bottomInset={insets.bottom}
-        onCamera={() => router.push('/add')}
-        onLibrary={() =>
-          router.push({ pathname: '/add', params: { source: 'library' } })
-        }
-        onManual={() =>
-          router.push({ pathname: '/add', params: { source: 'manual' } })
-        }
+        onPress={() => setImportOpen(true)}
+      />
+
+      <ImportSheet
+        visible={importOpen}
+        onClose={() => setImportOpen(false)}
+        onCamera={() => {
+          setImportOpen(false);
+          router.push('/add');
+        }}
+        onLibrary={() => {
+          setImportOpen(false);
+          router.push({ pathname: '/add', params: { source: 'library' } });
+        }}
+        onManual={() => {
+          setImportOpen(false);
+          router.push({ pathname: '/add', params: { source: 'manual' } });
+        }}
+        onPickImage={(uri) => {
+          setImportOpen(false);
+          router.push({
+            pathname: '/add',
+            params: { source: 'picked', imageUri: uri },
+          });
+        }}
       />
     </Screen>
   );
