@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   FlatList,
   Modal,
+  Pressable as RNPressable,
   StyleSheet,
   Text,
   View,
@@ -101,8 +102,11 @@ export function ImportSheet({
       animationType="slide"
       onRequestClose={onClose}
     >
-      <Pressable style={styles.scrim} onPress={onClose} scaleTo={1}>
-        <Pressable style={styles.card} onPress={() => {}} scaleTo={1}>
+      {/* Plain RN Pressables so the backdrop fills the screen (flex:1) and the
+          card anchors to the bottom. Tapping the backdrop closes; tapping the
+          card is swallowed so it stays open. */}
+      <RNPressable style={styles.scrim} onPress={onClose}>
+        <RNPressable style={styles.card} onPress={() => {}}>
           <View style={styles.handle} />
           <Text style={styles.title}>Add a receipt</Text>
 
@@ -173,8 +177,8 @@ export function ImportSheet({
               <Text style={styles.actionText}>Enter manually</Text>
             </Pressable>
           </View>
-        </Pressable>
-      </Pressable>
+        </RNPressable>
+      </RNPressable>
     </Modal>
   );
 }
