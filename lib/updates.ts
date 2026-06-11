@@ -35,9 +35,15 @@ export async function checkForUpdate(): Promise<AvailableUpdate | null> {
 
 /**
  * Downloads the waiting update and restarts the app into it. Throws if the
- * download fails so the caller can surface an error.
+ * reload itself fails so the caller can surface an error.
  */
 export async function downloadAndReload(): Promise<void> {
-  await Updates.fetchUpdateAsync();
+  try {
+    await Updates.fetchUpdateAsync();
+  } catch {
+    // Fetch can fail if the update was already downloaded on launch (Expo's
+    // default behaviour) or if we're briefly offline. Either way, fall through
+    // to reload — it applies whatever update is already downloaded and ready.
+  }
   await Updates.reloadAsync();
 }

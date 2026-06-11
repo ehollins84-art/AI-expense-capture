@@ -64,8 +64,12 @@ export function Toast({
   if (!visible) return null;
 
   return (
+    // NOTE: no pointerEvents="box-none" here. Under the New Architecture
+    // (Fabric) on iOS, box-none on this overlay can swallow taps to the inner
+    // buttons, so the Update / Undo actions did nothing. The wrap is only as
+    // tall as the pill, so leaving it tappable just intercepts a thin strip
+    // while a toast is visible — an acceptable trade for working buttons.
     <Animated.View
-      pointerEvents="box-none"
       style={[
         styles.wrap,
         { transform: [{ translateY: translate }], opacity },
