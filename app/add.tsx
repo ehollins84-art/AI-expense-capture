@@ -48,6 +48,11 @@ export default function AddExpense() {
   }>();
   const { saveExpenseAndSync, addProjectCategory, projects } = useStore();
   const active = useActiveProject();
+  // The project this receipt will be filed under. Defaults to the active
+  // project, but the user can change it on the review screen.
+  const [projectId, setProjectId] = useState<string | null>(null);
+  const selectedProject =
+    projects.find((p) => p.id === projectId) ?? active;
   const [phase, setPhase] = useState<Phase>('picking');
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -230,12 +235,26 @@ export default function AddExpense() {
     }
   }
 
+  // Switch which project this receipt is filed under. If the chosen project
+  // doesn't offer the currently-selected category, fall back to its first one
+  // so we never carry over a category the destination doesn't have.
+  function handleSelectProject(id: string) {
+    const dest = projects.find((p) => p.id === id);
+    if (!dest || id === selectedProject?.id) return;
+    haptic.select();
+    setProjectId(id);
+    const destCats = categoriesForProject(dest);
+    if (!destCats.some((c) => c.toLowerCase() === category.toLowerCase())) {
+      setCategory(destCats[0] ?? '');
+    }
+  }
+
   // Add a category on the fly from the expense form, then select it.
   async function handleAddCategory(name: string) {
-    if (!active) return;
+    if (!selectedProject) return;
     setNewCatOpen(false);
     try {
-      const updated = await addProjectCategory(active, name);
+      const updated = await addProjectCategory(selectedProject, name);
       // Match the canonical stored casing/trim in case it was normalized.
       const stored =
         categoriesForProject(updated).find(
@@ -250,7 +269,7 @@ export default function AddExpense() {
   }
 
   async function handleSave() {
-    if (!active) return;
+    if (!selectedProject) return;
     const parsedAmount = parseFloat(amount);
     if (!title.trim() || !date.trim() || !category.trim() || isNaN(parsedAmount)) {
       Alert.alert('Missing info', 'Please fill out every field before saving.');
@@ -260,7 +279,7 @@ export default function AddExpense() {
     try {
       await saveExpenseAndSync(
         {
-          projectId: active.id,
+          projectId: selectedProject.id,
           title: title.trim(),
           date,
           category,
@@ -335,7 +354,7 @@ export default function AddExpense() {
     );
   }
 
-  const cats = active ? categoriesForProject(active) : [];
+  const cats = selectedProject ? categoriesForProject(selectedProject) : [];
 
   return (
     <Screen edges={['top']}>
@@ -360,10 +379,6 @@ export default function AddExpense() {
               >
                 <Text style={styles.skipPillText}>Skip ›</Text>
               </Pressable>
-            ) : projects.length > 1 && active ? (
-              <Text style={styles.projectTag} numberOfLines={1}>
-                {active.name}
-              </Text>
             ) : null}
           </View>
 
@@ -391,6 +406,37 @@ export default function AddExpense() {
           )}
 
           {error && <Text style={styles.errorText}>{error}</Text>}
+
+          {/* Let the user re-file this receipt under a different project. Only
+              shown when there's more than one project to choose from. */}
+          {projects.length > 1 && (
+            <>
+              <Text style={styles.fieldLabel}>Project</Text>
+              <View style={styles.categoryGrid}>
+                {projects.map((p) => {
+                  const isActive = p.id === selectedProject?.id;
+                  return (
+                    <Pressable
+                      key={p.id}
+                      hapticOnPress="select"
+                      disabled={!!reveal}
+                      onPress={() => handleSelectProject(p.id)}
+                      style={[styles.catChip, isActive && styles.catChipActive]}
+                    >
+                      <Text
+                        style={[
+                          styles.catChipText,
+                          isActive && styles.catChipTextActive,
+                        ]}
+                      >
+                        {p.name}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </>
+          )}
 
           <Text style={styles.fieldLabel}>Title</Text>
           {reveal && reveal.step === 'title' ? (
@@ -599,14 +645,6 @@ const styles = StyleSheet.create({
     ...theme.type.body,
     color: theme.colors.text,
     flexShrink: 1,
-  },
-  projectTag: {
-    ...theme.type.label,
-    color: theme.colors.textMuted,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: theme.radius.pill,
-    backgroundColor: theme.colors.surfaceAlt,
   },
   preview: {
     width: '100%',
