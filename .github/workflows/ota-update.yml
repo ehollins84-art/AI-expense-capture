@@ -8,10 +8,15 @@
 name: OTA Update (production)
 
 on:
-  # Auto-publish whenever anything is merged to the default branch.
+  # Auto-publish whenever anything is merged to the default branch, OR when a
+  # commit is pushed to the dedicated `claude/ota` trigger branch. The trigger
+  # branch is session-independent: any future session can ship an OTA by running
+  # `git push origin HEAD:claude/ota`, without depending on the default branch's
+  # name. See RELEASING.md.
   push:
     branches:
       - claude/great-pascal-ty8wN
+      - claude/ota
   # Also allow publishing on demand from the GitHub Actions tab.
   workflow_dispatch:
     inputs:

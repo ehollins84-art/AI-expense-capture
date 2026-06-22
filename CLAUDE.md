@@ -88,3 +88,28 @@ Defaults to use:
   Skip the commands. Say "no need to pull, this is doc-only" so I know.
 
 If a change requires me to do something special before testing (clear cache differently, sign out and back in, force-close Expo Go, etc.), say so in one plain-English line above the commands.
+
+## Shipping to users (engineering note — this part isn't for me, it's for you)
+
+The release pipeline is fully set up. **Never ask me for tokens, API keys,
+signing certificates, or App Store / Play credentials — they're all stored
+already** (a GitHub `EXPO_TOKEN` secret, EAS-managed signing/submit credentials
+for both stores, and EAS environment variables for the extraction backend). If
+something seems missing, check **`RELEASING.md`** and the EAS dashboard before
+asking me.
+
+How to ship (this remote environment can't dispatch workflows or push tags — you
+trigger CI by pushing to a branch a workflow watches):
+
+- **JavaScript / asset change (most things):** ship an over-the-air update — no
+  rebuild. Push the commit to **`claude/ota`** (`git push origin HEAD:claude/ota`).
+  The `OTA Update (production)` workflow publishes to the production channel for
+  both platforms; live users get it on next reopen.
+- **Native change** (new native module, new permission, Expo SDK bump, or an
+  `app.json` `version` bump): push to **`claude/build`** to build both platforms
+  and auto-submit to TestFlight + Play internal. Bump `version` when native deps
+  change.
+
+Full runbook — trigger branches, the OTA-vs-build decision, the runtime-version
+rule, and where every credential lives — is in **`RELEASING.md`**. Read it before
+shipping.
