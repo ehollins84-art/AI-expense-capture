@@ -8,3 +8,14 @@ ANTHROPIC_MODEL = "claude-opus-4-7"
 # Secrets are NOT stored here. Set them via wrangler:
 #   wrangler secret put ANTHROPIC_API_KEY
 #   wrangler secret put APP_SHARED_SECRET
+
+# D1 database backing shared projects. Create it once and paste the id below:
+#   npx wrangler d1 create manila-shares
+#   npx wrangler d1 migrations apply manila-shares --remote
+# (See README.md → "Shared projects".) If this binding is absent the worker
+# still serves receipt extraction; only the /shares/* routes go dark.
+[[d1_databases]]
+binding = "DB"
+database_name = "manila-shares"
+database_id = "REPLACE_WITH_D1_DATABASE_ID"
+migrations_dir = "migrations"

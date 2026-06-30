@@ -7,6 +7,13 @@ export type Project = {
   customCategories?: string[];
   additionalCategories?: string[];
   createdAt: string;
+  // --- Shared projects ---
+  // Present when this project is shared with other people through the backend.
+  // For a shared project, `id` equals `shareId` and its expenses sync to the
+  // server instead of the local filesystem / personal Drive.
+  shareId?: string;
+  ownerEmail?: string;
+  members?: string[];
 };
 
 export type Expense = {
@@ -20,6 +27,11 @@ export type Expense = {
   imageFilename?: string;
   notes?: string;
   createdAt: string;
+  // --- Shared projects ---
+  // Present when this expense belongs to a shared project. `addedByEmail` is the
+  // Google account of whoever captured it — only they can edit or delete it.
+  shareId?: string;
+  addedByEmail?: string;
 };
 
 export type Iteration = {

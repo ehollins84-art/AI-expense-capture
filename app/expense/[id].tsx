@@ -151,7 +151,7 @@ export default function ExpenseDetail() {
     try {
       const stored = await updateExpense(next);
       const p = await imagePathForExpense(iteration, stored);
-      setImageUri(`${p}?t=${Date.now()}`);
+      setImageUri(p ? `${p}?t=${Date.now()}` : null);
       haptic.light();
       flash(field);
     } catch (e) {
@@ -652,7 +652,7 @@ export default function ExpenseDetail() {
           updateExpense(next)
             .then(async (stored) => {
               const p = await imagePathForExpense(iteration, stored);
-              setImageUri(`${p}?t=${Date.now()}`);
+              setImageUri(p ? `${p}?t=${Date.now()}` : null);
               haptic.light();
               flash('date');
             })

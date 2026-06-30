@@ -43,6 +43,21 @@ import {
   type ImportProgress,
   type ImportResult,
 } from './drive';
+import {
+  shareConfigured,
+  pullShares,
+  createShare,
+  inviteMember,
+  leaveShare,
+  pushExpense,
+  readShareCache,
+  writeShareCache,
+  sharedToProject,
+  sharedToExpenses,
+  ShareNotConnectedError,
+  type SharedProject,
+  type SharedExpense,
+} from './share';
 
 type StoreState = {
   iteration: string;
@@ -82,6 +97,10 @@ type StoreCtx = StoreState & {
     iter: string,
     onProgress: (p: ImportProgress) => void,
   ) => Promise<ImportResult>;
+  // --- Shared projects ---
+  shareProject: (project: Project, inviteeEmail: string) => Promise<Project>;
+  inviteToProject: (project: Project, email: string) => Promise<Project>;
+  leaveSharedProject: (project: Project) => Promise<void>;
 };
 
 const ACTIVE_PROJECT_KEY = 'activeProjectId';
@@ -90,19 +109,60 @@ const Ctx = createContext<StoreCtx | null>(null);
 
 export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [iteration, setIterationState] = useState<string>('A');
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [expenses, setExpenses] = useState<Expense[]>([]);
+  // Local (personal) projects/expenses, persisted to the filesystem + Drive.
+  const [localProjects, setLocalProjects] = useState<Project[]>([]);
+  const [localExpenses, setLocalExpenses] = useState<Expense[]>([]);
+  // Shared projects, persisted on the backend and cached in AsyncStorage.
+  const [sharedProjects, setSharedProjects] = useState<SharedProject[]>([]);
   const [activeProjectId, setActiveProjectIdState] = useState<string | null>(
     null,
   );
   const [loading, setLoading] = useState(true);
 
+  // Shared projects are surfaced to the rest of the app as ordinary projects /
+  // expenses (tagged with shareId) so every existing screen — totals, category
+  // breakdown, search — works on them unchanged.
+  const sharedAsProjects = useMemo(
+    () => sharedProjects.map(sharedToProject),
+    [sharedProjects],
+  );
+  const sharedAsExpenses = useMemo(
+    () => sharedProjects.flatMap(sharedToExpenses),
+    [sharedProjects],
+  );
+  const projects = useMemo(
+    () => [...localProjects, ...sharedAsProjects],
+    [localProjects, sharedAsProjects],
+  );
+  const expenses = useMemo(
+    () => [...localExpenses, ...sharedAsExpenses],
+    [localExpenses, sharedAsExpenses],
+  );
+
   const loadForIteration = useCallback(async (letter: string) => {
     await ensureIteration(letter);
     const [p, e] = await Promise.all([readProjects(letter), readExpenses(letter)]);
-    setProjects(p);
-    setExpenses(e);
+    setLocalProjects(p);
+    setLocalExpenses(e);
     return { projects: p, expenses: e };
+  }, []);
+
+  // Pull shared projects from the backend, falling back to the on-device cache
+  // when offline or not signed in. Best-effort: never throws to callers.
+  const loadShared = useCallback(async () => {
+    const cached = await readShareCache();
+    setSharedProjects(cached);
+    if (!shareConfigured()) return;
+    try {
+      const fresh = await pullShares();
+      setSharedProjects(fresh);
+      await writeShareCache(fresh);
+    } catch (e) {
+      // Not signed into Google, or offline — keep showing the cache.
+      if (!(e instanceof ShareNotConnectedError)) {
+        console.warn('Shared projects pull failed:', e);
+      }
+    }
   }, []);
 
   useEffect(() => {
@@ -113,6 +173,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         const start = cloudIter ?? all[0] ?? 'A';
         setIterationState(start);
         await loadForIteration(start);
+        await loadShared();
 
         const ap = await AsyncStorage.getItem(ACTIVE_PROJECT_KEY);
         if (ap) setActiveProjectIdState(ap);
@@ -120,11 +181,12 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         setLoading(false);
       }
     })();
-  }, [loadForIteration]);
+  }, [loadForIteration, loadShared]);
 
   const refresh = useCallback(async () => {
     await loadForIteration(iteration);
-  }, [iteration, loadForIteration]);
+    await loadShared();
+  }, [iteration, loadForIteration, loadShared]);
 
   const setIteration = useCallback(
     async (letter: string) => {
@@ -140,6 +202,37 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     if (id) AsyncStorage.setItem(ACTIVE_PROJECT_KEY, id);
     else AsyncStorage.removeItem(ACTIVE_PROJECT_KEY);
   }, []);
+
+  // Look up a shared project (raw backend record) by its share id.
+  const findShared = useCallback(
+    (projectId: string | undefined | null) =>
+      projectId ? sharedProjects.find((sp) => sp.id === projectId) : undefined,
+    [sharedProjects],
+  );
+
+  // Merge a single saved/removed shared expense into in-memory state + cache,
+  // so the UI updates without waiting for a full re-pull.
+  const applySharedExpense = useCallback(
+    (shareId: string, expense: SharedExpense | null, removedId?: string) => {
+      setSharedProjects((prev) => {
+        const next = prev.map((sp) => {
+          if (sp.id !== shareId) return sp;
+          let list = sp.expenses;
+          if (removedId) {
+            list = list.filter((e) => e.id !== removedId);
+          } else if (expense) {
+            list = list.some((e) => e.id === expense.id)
+              ? list.map((e) => (e.id === expense.id ? expense : e))
+              : [...list, expense];
+          }
+          return { ...sp, expenses: list };
+        });
+        writeShareCache(next).catch(() => {});
+        return next;
+      });
+    },
+    [],
+  );
 
   const addProject = useCallback(
     async (
@@ -160,9 +253,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         customCategories: scheme === 'custom' ? customCategories : undefined,
         createdAt: new Date().toISOString(),
       };
-      const next = [...projects, project];
+      const next = [...localProjects, project];
       await writeProjects(iteration, next);
-      setProjects(next);
+      setLocalProjects(next);
       setActiveProject(project.id);
 
       if (await isConnected()) {
@@ -172,11 +265,16 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       }
       return project;
     },
-    [projects, iteration, setActiveProject],
+    [projects, localProjects, iteration, setActiveProject],
   );
 
   const updateProject = useCallback(
     async (next: Project): Promise<Project> => {
+      // Shared projects aren't editable through this path (their name and
+      // categories live on the backend); guard so callers fail clearly.
+      if (next.shareId) {
+        throw new Error('Shared projects can\'t be edited here yet.');
+      }
       const trimmedName = next.name.trim();
       if (!trimmedName) {
         throw new Error('Project name can\'t be empty.');
@@ -190,9 +288,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         throw new Error(`Another project is already named "${trimmedName}".`);
       }
       const updated: Project = { ...next, name: trimmedName };
-      const list = projects.map((p) => (p.id === updated.id ? updated : p));
+      const list = localProjects.map((p) => (p.id === updated.id ? updated : p));
       await writeProjects(iteration, list);
-      setProjects(list);
+      setLocalProjects(list);
 
       if (await isConnected()) {
         uploadProjectManifest(iteration, updated).catch((err) =>
@@ -201,14 +299,17 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       }
       return updated;
     },
-    [projects, iteration],
+    [projects, localProjects, iteration],
   );
 
   const removeProject = useCallback(
     async (project: Project) => {
+      if (project.shareId) {
+        throw new Error('Use "Leave shared project" to remove a shared project.');
+      }
       await deleteProjectAndExpenses(iteration, project.id);
-      setProjects((prev) => prev.filter((p) => p.id !== project.id));
-      setExpenses((prev) => prev.filter((e) => e.projectId !== project.id));
+      setLocalProjects((prev) => prev.filter((p) => p.id !== project.id));
+      setLocalExpenses((prev) => prev.filter((e) => e.projectId !== project.id));
       if (activeProjectId === project.id) {
         setActiveProject(null);
       }
@@ -222,7 +323,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     async (project: Project, changed: Expense[], previousLabel: string) => {
       if (changed.length === 0) return;
       const byId = new Map(changed.map((e) => [e.id, e]));
-      setExpenses((prev) => prev.map((e) => byId.get(e.id) ?? e));
+      setLocalExpenses((prev) => prev.map((e) => byId.get(e.id) ?? e));
       if (await isConnected()) {
         for (const e of changed) {
           const old: Expense = { ...e, category: previousLabel };
@@ -283,15 +384,43 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       input: Omit<Expense, 'id' | 'createdAt' | 'imageFilename'>,
       imageUri: string | null,
     ): Promise<Expense> => {
+      // Shared project: the expense goes to the backend (metadata only — the
+      // receipt photo stays on this phone and is not uploaded).
+      const shared = findShared(input.projectId);
+      if (shared) {
+        const saved = await pushExpense(shared.id, {
+          title: input.title,
+          date: input.date,
+          category: input.category,
+          amount: input.amount,
+          currency: input.currency,
+          notes: input.notes,
+        });
+        if (saved) applySharedExpense(shared.id, saved);
+        return {
+          id: saved?.id ?? newId(),
+          projectId: input.projectId,
+          title: input.title,
+          date: input.date,
+          category: input.category,
+          amount: input.amount,
+          currency: input.currency,
+          notes: input.notes,
+          createdAt: saved?.createdAt ?? new Date().toISOString(),
+          shareId: shared.id,
+          addedByEmail: saved?.addedByEmail,
+        };
+      }
+
       const expense: Expense = {
         ...input,
         id: newId(),
         createdAt: new Date().toISOString(),
       };
       const stored = await saveExpense(iteration, expense, imageUri);
-      setExpenses((prev) => [...prev, stored]);
+      setLocalExpenses((prev) => [...prev, stored]);
 
-      const proj = projects.find((p) => p.id === stored.projectId);
+      const proj = localProjects.find((p) => p.id === stored.projectId);
       if (proj && (await isConnected())) {
         uploadExpenseToDrive(iteration, proj, stored, imageUri).catch((err) =>
           console.warn('Drive sync failed:', err),
@@ -299,34 +428,62 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       }
       return stored;
     },
-    [iteration, projects],
+    [iteration, localProjects, findShared, applySharedExpense],
   );
 
   const removeExpense = useCallback(
     async (expense: Expense) => {
+      if (expense.shareId) {
+        // Backend enforces "only the author can delete". Soft-deletes on server.
+        await pushExpense(expense.shareId, {
+          id: expense.id,
+          title: expense.title,
+          date: expense.date,
+          category: expense.category,
+          amount: expense.amount,
+          currency: expense.currency,
+          deleted: true,
+        });
+        applySharedExpense(expense.shareId, null, expense.id);
+        return;
+      }
       await deleteExpenseFs(iteration, expense);
-      setExpenses((prev) => prev.filter((e) => e.id !== expense.id));
+      setLocalExpenses((prev) => prev.filter((e) => e.id !== expense.id));
 
-      const proj = projects.find((p) => p.id === expense.projectId);
+      const proj = localProjects.find((p) => p.id === expense.projectId);
       if (proj && (await isConnected())) {
         deleteExpenseFromDrive(iteration, proj, expense).catch((err) =>
           console.warn('Drive delete failed:', err),
         );
       }
     },
-    [iteration, projects],
+    [iteration, localProjects, applySharedExpense],
   );
 
   const updateExpense = useCallback(
     async (next: Expense): Promise<Expense> => {
-      const old = expenses.find((e) => e.id === next.id);
+      if (next.shareId) {
+        const saved = await pushExpense(next.shareId, {
+          id: next.id,
+          title: next.title,
+          date: next.date,
+          category: next.category,
+          amount: next.amount,
+          currency: next.currency,
+          notes: next.notes,
+          createdAt: next.createdAt,
+        });
+        if (saved) applySharedExpense(next.shareId, saved);
+        return next;
+      }
+      const old = localExpenses.find((e) => e.id === next.id);
       if (!old) return next;
       const stored = await updateExpenseFs(iteration, old, next);
-      setExpenses((prev) =>
+      setLocalExpenses((prev) =>
         prev.map((e) => (e.id === stored.id ? stored : e)),
       );
 
-      const proj = projects.find((p) => p.id === stored.projectId);
+      const proj = localProjects.find((p) => p.id === stored.projectId);
       if (proj && (await isConnected())) {
         // The local image lives at the new folder path post-update.
         const fs = await import('./storage');
@@ -337,13 +494,21 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       }
       return stored;
     },
-    [expenses, projects, iteration],
+    [localExpenses, localProjects, iteration, applySharedExpense],
   );
 
   const moveExpense = useCallback(
     async (expense: Expense, toProjectId: string): Promise<Expense> => {
       if (expense.projectId === toProjectId) return expense;
-      const dest = projects.find((p) => p.id === toProjectId);
+      // Moving across the shared/personal boundary isn't supported yet — the
+      // two stores have different identities and (for shared) no photos.
+      const destShared = findShared(toProjectId);
+      if (expense.shareId || destShared) {
+        throw new Error(
+          'Moving receipts in or out of shared projects isn\'t supported yet.',
+        );
+      }
+      const dest = localProjects.find((p) => p.id === toProjectId);
       if (!dest) throw new Error('That project no longer exists.');
       // Keep the category if the destination offers it; otherwise the receipt
       // lands in the destination's always-present Uncategorized bucket.
@@ -355,10 +520,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       const next: Expense = { ...old, projectId: toProjectId, category };
       // Moves the receipt's folder into the destination project on disk.
       const stored = await updateExpenseFs(iteration, old, next);
-      setExpenses((prev) => prev.map((e) => (e.id === stored.id ? stored : e)));
+      setLocalExpenses((prev) => prev.map((e) => (e.id === stored.id ? stored : e)));
 
       if (await isConnected()) {
-        const fromProj = projects.find((p) => p.id === old.projectId);
+        const fromProj = localProjects.find((p) => p.id === old.projectId);
         const imageUri = await imagePathForExpense(iteration, stored);
         // Remove from the old project's Drive folder, then add to the new one
         // so the receipt isn't left orphaned in both. Best-effort.
@@ -369,16 +534,19 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       }
       return stored;
     },
-    [projects, iteration],
+    [localProjects, iteration, findShared],
   );
 
   const attachImage = useCallback(
     async (expense: Expense, imageUri: string): Promise<Expense> => {
+      if (expense.shareId) {
+        throw new Error('Receipt photos aren\'t part of shared projects yet.');
+      }
       const stored = await attachImageToExpenseFs(iteration, expense, imageUri);
-      setExpenses((prev) =>
+      setLocalExpenses((prev) =>
         prev.map((e) => (e.id === stored.id ? stored : e)),
       );
-      const proj = projects.find((p) => p.id === stored.projectId);
+      const proj = localProjects.find((p) => p.id === stored.projectId);
       if (proj && (await isConnected())) {
         uploadExpenseToDrive(iteration, proj, stored, imageUri).catch((err) =>
           console.warn('Drive sync failed:', err),
@@ -386,7 +554,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       }
       return stored;
     },
-    [iteration, projects],
+    [iteration, localProjects],
   );
 
   const importFromDrive = useCallback(
@@ -394,8 +562,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       iter: string,
       onProgress: (p: ImportProgress) => void,
     ): Promise<ImportResult> => {
-      const existingProjectIds = new Set(projects.map((p) => p.id));
-      const existingExpenseIds = new Set(expenses.map((e) => e.id));
+      const existingProjectIds = new Set(localProjects.map((p) => p.id));
+      const existingExpenseIds = new Set(localExpenses.map((e) => e.id));
       const result = await importIterationDrive(
         iter,
         existingProjectIds,
@@ -406,7 +574,101 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       await loadForIteration(iter);
       return result;
     },
-    [projects, expenses, loadForIteration],
+    [localProjects, localExpenses, loadForIteration],
+  );
+
+  // --- Shared-project actions -------------------------------------------------
+
+  // Turn a personal project into a shared one: create it on the backend, copy
+  // its existing expenses up (metadata only), invite the first collaborator,
+  // then drop the local copy so it isn't duplicated. Aborts without touching
+  // local data if any backend step fails.
+  const shareProject = useCallback(
+    async (project: Project, inviteeEmail: string): Promise<Project> => {
+      if (project.shareId) {
+        throw new Error('This project is already shared.');
+      }
+      // The category list the collaborator will see — resolved, minus the
+      // auto-appended Uncategorized bucket (it's re-added on the other side).
+      const categories = categoriesForProject(project).filter(
+        (c) => !isProtectedCategory(c),
+      );
+      const created = await createShare({
+        // Reuse the project's id so it keeps its identity once shared.
+        id: project.id,
+        name: project.name,
+        scheme: 'custom',
+        categories,
+      });
+
+      try {
+        // Migrate existing receipts into the shared ledger, preserving ids.
+        const toMigrate = localExpenses.filter(
+          (e) => e.projectId === project.id,
+        );
+        for (const e of toMigrate) {
+          await pushExpense(created.id, {
+            id: e.id,
+            title: e.title,
+            date: e.date,
+            category: e.category,
+            amount: e.amount,
+            currency: e.currency,
+            notes: e.notes,
+            createdAt: e.createdAt,
+          });
+        }
+        await inviteMember(created.id, inviteeEmail);
+      } catch (e) {
+        // Roll back the half-created share so we don't leave an orphan.
+        await leaveShare(created.id).catch(() => {});
+        throw e;
+      }
+
+      // Drop the local copy now that it lives on the backend.
+      await deleteProjectAndExpenses(iteration, project.id);
+      setLocalProjects((prev) => prev.filter((p) => p.id !== project.id));
+      setLocalExpenses((prev) => prev.filter((e) => e.projectId !== project.id));
+
+      // Pull the authoritative shared state (with members + migrated expenses).
+      const fresh = await pullShares();
+      setSharedProjects(fresh);
+      await writeShareCache(fresh);
+
+      setActiveProject(created.id);
+      return sharedToProject(
+        fresh.find((s) => s.id === created.id) ?? created,
+      );
+    },
+    [iteration, localExpenses, setActiveProject],
+  );
+
+  const inviteToProject = useCallback(
+    async (project: Project, email: string): Promise<Project> => {
+      if (!project.shareId) throw new Error('This project isn\'t shared.');
+      const updated = await inviteMember(project.shareId, email);
+      setSharedProjects((prev) => {
+        const next = prev.map((s) => (s.id === updated.id ? updated : s));
+        writeShareCache(next).catch(() => {});
+        return next;
+      });
+      return sharedToProject(updated);
+    },
+    [],
+  );
+
+  const leaveSharedProject = useCallback(
+    async (project: Project): Promise<void> => {
+      if (!project.shareId) throw new Error('This project isn\'t shared.');
+      await leaveShare(project.shareId);
+      setSharedProjects((prev) => {
+        const next = prev.filter((s) => s.id !== project.shareId);
+        writeShareCache(next).catch(() => {});
+        return next;
+      });
+      if (activeProjectId === project.id) setActiveProject(null);
+    },
+    [activeProjectId, setActiveProject],
   );
 
   const value = useMemo<StoreCtx>(
@@ -431,6 +693,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       removeExpense,
       refresh,
       importFromDrive,
+      shareProject,
+      inviteToProject,
+      leaveSharedProject,
     }),
     [
       iteration,
@@ -453,6 +718,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       removeExpense,
       refresh,
       importFromDrive,
+      shareProject,
+      inviteToProject,
+      leaveSharedProject,
     ],
   );
 

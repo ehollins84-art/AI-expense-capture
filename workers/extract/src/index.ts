@@ -6,10 +6,15 @@
 // shared secret token guards the endpoint so casual reverse-engineering of
 // the IPA can't drain the API balance.
 
+import { handleShareRequest } from './shares';
+
 export interface Env {
   ANTHROPIC_API_KEY: string;
   APP_SHARED_SECRET: string;
   ANTHROPIC_MODEL?: string;
+  // D1 database backing shared projects. Optional: if it isn't bound the
+  // /shares/* routes return 503 and receipt extraction still works.
+  DB: D1Database;
 }
 
 type ExtractRequest = {
@@ -85,6 +90,18 @@ export default {
     const url = new URL(req.url);
     if (url.pathname === '/health') {
       return plain('ok', 200);
+    }
+
+    // Shared-projects API. Same app-token gate as /extract; per-user identity is
+    // verified inside the handler from the caller's Google token.
+    if (url.pathname.startsWith('/shares/')) {
+      if (req.method !== 'POST') return plain('Not found', 404);
+      const appToken = req.headers.get('x-app-token');
+      if (!appToken || appToken !== env.APP_SHARED_SECRET) {
+        return plain('Unauthorized', 401);
+      }
+      const action = url.pathname.slice('/shares/'.length);
+      return handleShareRequest(req, env, action);
     }
 
     if (req.method !== 'POST' || url.pathname !== '/extract') {

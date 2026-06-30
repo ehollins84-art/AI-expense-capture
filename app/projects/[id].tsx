@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   StyleSheet,
@@ -15,11 +15,13 @@ import { useStore } from '../../lib/store';
 import { theme } from '../../lib/theme';
 import {
   baseCategoriesForProject,
+  categoriesForProject,
   labelForScheme,
   removableCategories,
   UNCATEGORIZED,
 } from '../../lib/categories';
 import { haptic } from '../../lib/haptics';
+import { myEmail, shareConfigured } from '../../lib/share';
 import type { Project } from '../../lib/types';
 
 export default function EditProject() {
@@ -33,6 +35,9 @@ export default function EditProject() {
     addProjectCategory,
     renameProjectCategory,
     deleteProjectCategory,
+    shareProject,
+    inviteToProject,
+    leaveSharedProject,
   } = useStore();
   const project = projects.find((p) => p.id === id);
 
@@ -41,6 +46,17 @@ export default function EditProject() {
   const [saving, setSaving] = useState(false);
   // When set, the rename prompt is open for this existing category name.
   const [renameTarget, setRenameTarget] = useState<string | null>(null);
+  // Email-entry prompt: 'share' to start sharing a project, 'invite' to add
+  // another person to an already-shared project.
+  const [emailPrompt, setEmailPrompt] = useState<'share' | 'invite' | null>(
+    null,
+  );
+  const [busy, setBusy] = useState(false);
+  const [me, setMe] = useState<string | null>(null);
+
+  useEffect(() => {
+    myEmail().then(setMe);
+  }, []);
 
   const expenseCount = useMemo(
     () => (project ? expenses.filter((e) => e.projectId === project.id).length : 0),
@@ -65,6 +81,186 @@ export default function EditProject() {
       </Screen>
     );
   }
+
+  const isShared = !!project.shareId;
+  const isOwner = isShared && !!me && me === project.ownerEmail;
+
+  // --- Email-entry prompt (used for both "share" and "invite") ---
+  async function handleEmailSubmit(email: string) {
+    const mode = emailPrompt;
+    setEmailPrompt(null);
+    const trimmed = email.trim();
+    if (!trimmed || !project) return;
+    if (!shareConfigured()) {
+      Alert.alert(
+        'Sharing isn\'t available',
+        'This build isn\'t set up for shared projects yet.',
+      );
+      return;
+    }
+    setBusy(true);
+    try {
+      if (mode === 'share') {
+        await shareProject(project, trimmed);
+        haptic.success();
+        Alert.alert(
+          'Project shared',
+          `${trimmed} can now add expenses to "${project.name}" and you'll both see the combined total. They'll see it once they sign in with this email.`,
+        );
+      } else if (mode === 'invite') {
+        await inviteToProject(project, trimmed);
+        haptic.success();
+        Alert.alert('Person added', `${trimmed} can now add to this project.`);
+      }
+    } catch (e) {
+      haptic.error();
+      Alert.alert(
+        'Couldn\'t share',
+        e instanceof Error ? e.message : String(e),
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function confirmLeave() {
+    if (!project) return;
+    const ownerLeaving = isOwner;
+    const title = ownerLeaving ? 'Delete shared project?' : 'Leave shared project?';
+    const message = ownerLeaving
+      ? `You own "${project.name}". Deleting it removes it for everyone you've shared it with. This can't be undone.`
+      : `You'll stop seeing "${project.name}" and its expenses. The owner keeps it.`;
+    Alert.alert(title, message, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: ownerLeaving ? 'Delete for everyone' : 'Leave',
+        style: 'destructive',
+        onPress: async () => {
+          setBusy(true);
+          try {
+            await leaveSharedProject(project);
+            haptic.warning();
+            router.back();
+          } catch (e) {
+            haptic.error();
+            Alert.alert(
+              'Couldn\'t leave',
+              e instanceof Error ? e.message : String(e),
+            );
+          } finally {
+            setBusy(false);
+          }
+        },
+      },
+    ]);
+  }
+
+  // ===========================================================================
+  // Shared project view — name and categories are fixed; the screen is about
+  // who it's shared with.
+  // ===========================================================================
+  if (isShared) {
+    const cats = categoriesForProject(project);
+    return (
+      <Screen>
+        <View style={styles.topBar}>
+          <Pressable
+            onPress={() => router.back()}
+            hapticOnPress="select"
+            hitSlop={12}
+            scaleTo={1}
+          >
+            <Text style={styles.cancelText}>Done</Text>
+          </Pressable>
+        </View>
+
+        <KeyboardAwareScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={styles.scroll}
+          keyboardShouldPersistTaps="handled"
+          bottomOffset={theme.spacing.lg}
+        >
+          <Text style={styles.heading}>{project.name}</Text>
+          <View style={styles.sharedBadge}>
+            <Text style={styles.sharedBadgeText}>● Shared project</Text>
+          </View>
+
+          <Text style={[styles.fieldLabel, { marginTop: theme.spacing.lg }]}>
+            People
+          </Text>
+          <View style={styles.peopleCard}>
+            {(project.members ?? []).map((email) => {
+              const isYou = !!me && email === me;
+              const owner = email === project.ownerEmail;
+              return (
+                <View key={email} style={styles.personRow}>
+                  <Text style={styles.personEmail} numberOfLines={1}>
+                    {email}
+                    {isYou ? ' (you)' : ''}
+                  </Text>
+                  <Text style={styles.personRole}>{owner ? 'Owner' : 'Member'}</Text>
+                </View>
+              );
+            })}
+          </View>
+
+          {isOwner && (
+            <Pressable
+              style={[styles.btn, styles.btnGhost, { marginTop: theme.spacing.md }]}
+              hapticOnPress="select"
+              disabled={busy}
+              onPress={() => setEmailPrompt('invite')}
+            >
+              <Text style={styles.btnGhostText}>+ Add someone by email</Text>
+            </Pressable>
+          )}
+
+          <Text style={[styles.fieldLabel, { marginTop: theme.spacing.lg }]}>
+            Categories
+          </Text>
+          <View style={styles.chipWrap}>
+            {cats.map((c) => (
+              <View key={c} style={[styles.chip, styles.chipLocked]}>
+                <Text style={styles.chipLockedText}>{c}</Text>
+              </View>
+            ))}
+          </View>
+          <Text style={styles.helperText}>
+            Receipt photos stay on each person's phone — shared projects track
+            the amounts and totals, not the images.
+          </Text>
+
+          <View style={styles.divider} />
+
+          <Pressable
+            style={[styles.btn, styles.btnDanger]}
+            hapticOnPress="warning"
+            onPress={confirmLeave}
+            disabled={busy}
+            scaleTo={1}
+          >
+            <Text style={styles.btnDangerText}>
+              {isOwner ? 'Delete shared project' : 'Leave shared project'}
+            </Text>
+          </Pressable>
+
+          <View style={{ height: theme.spacing.xxl }} />
+        </KeyboardAwareScrollView>
+
+        <CategoryPromptModal
+          visible={emailPrompt === 'invite'}
+          title="Add someone"
+          confirmLabel="Add"
+          onSubmit={handleEmailSubmit}
+          onDismiss={() => setEmailPrompt(null)}
+        />
+      </Screen>
+    );
+  }
+
+  // ===========================================================================
+  // Personal project view (original editor + a Share entry point).
+  // ===========================================================================
 
   // Built-in tax categories shown (locked) for Schedule E/C projects.
   const base = baseCategoriesForProject(project);
@@ -158,6 +354,35 @@ export default function EditProject() {
     } finally {
       setSaving(false);
     }
+  }
+
+  function handleShare() {
+    if (!shareConfigured()) {
+      Alert.alert(
+        'Sharing isn\'t available',
+        'This build isn\'t set up for shared projects yet.',
+      );
+      return;
+    }
+    if (!me) {
+      Alert.alert(
+        'Connect Google first',
+        'Sharing uses your Google account to identify you. Connect Google in Settings, then come back to share.',
+      );
+      return;
+    }
+    Alert.alert(
+      'Share this project',
+      `You'll add someone by email. They'll be able to add expenses and see the combined total. Receipt photos stay private to each phone.${
+        expenseCount > 0
+          ? `\n\nYour ${expenseCount} existing receipt${expenseCount === 1 ? '' : 's'} will move into the shared project (without their photos).`
+          : ''
+      }`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Add an email', onPress: () => setEmailPrompt('share') },
+      ],
+    );
   }
 
   function handleDelete() {
@@ -339,6 +564,28 @@ export default function EditProject() {
             </Pressable>
           </View>
 
+          {/* --- Share entry point --- */}
+          <Text style={[styles.fieldLabel, { marginTop: theme.spacing.lg }]}>
+            Share
+          </Text>
+          <View style={styles.schemeCard}>
+            <Text style={styles.schemeHint}>
+              Share this project with someone by email. You'll both be able to
+              add expenses and see the combined total. Receipt photos stay
+              private to each phone.
+            </Text>
+            <Pressable
+              style={[styles.btn, styles.btnGhost, { marginTop: theme.spacing.md }]}
+              hapticOnPress="select"
+              disabled={busy}
+              onPress={handleShare}
+            >
+              <Text style={styles.btnGhostText}>
+                {busy ? 'Sharing…' : 'Share this project'}
+              </Text>
+            </Pressable>
+          </View>
+
           <View style={styles.divider} />
 
           <Pressable
@@ -364,6 +611,14 @@ export default function EditProject() {
         onSubmit={(to) => renameTarget && handleRename(renameTarget, to)}
         onDismiss={() => setRenameTarget(null)}
       />
+
+      <CategoryPromptModal
+        visible={emailPrompt === 'share'}
+        title="Share with"
+        confirmLabel="Share"
+        onSubmit={handleEmailSubmit}
+        onDismiss={() => setEmailPrompt(null)}
+      />
     </Screen>
   );
 }
@@ -386,6 +641,35 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     marginBottom: theme.spacing.lg,
   },
+  sharedBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: theme.colors.accentSoft,
+    borderRadius: theme.radius.pill,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  sharedBadgeText: {
+    ...theme.type.label,
+    color: theme.colors.accent,
+    fontWeight: '600',
+  },
+  peopleCard: {
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radius.lg,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    paddingHorizontal: theme.spacing.md,
+  },
+  personRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 14,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: theme.colors.border,
+  },
+  personEmail: { ...theme.type.body, color: theme.colors.text, flex: 1, marginRight: 8 },
+  personRole: { ...theme.type.label, color: theme.colors.textMuted },
   fieldLabel: {
     ...theme.type.label,
     color: theme.colors.textMuted,

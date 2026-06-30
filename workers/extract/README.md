@@ -70,12 +70,60 @@ curl -X POST https://manila-extract.<your-subdomain>.workers.dev/extract \
 # expected: Unauthorized
 ```
 
+## Shared projects (D1 database)
+
+The same Worker also backs **shared projects** — projects two people can both
+add expenses to and see a combined total. This needs a Cloudflare D1 database
+(SQLite, on the free tier). Receipt *photos* are never uploaded here; only the
+expense details (title, date, category, amount) sync, keyed by share.
+
+Identity is each user's Google account: the app sends the signed-in user's
+Google token with every request and the Worker verifies it against Google's
+userinfo endpoint, so a client can never impersonate someone else. (Users must
+connect Google in the app's Settings to use sharing — same sign-in as Drive.)
+
+### One-time setup (from your Codespace)
+
+```bash
+cd workers/extract
+npx wrangler d1 create manila-shares
+```
+
+Wrangler prints a `database_id`. Paste it into `wrangler.toml` under
+`[[d1_databases]]` (replacing `REPLACE_WITH_D1_DATABASE_ID`). Then create the
+tables and deploy:
+
+```bash
+npx wrangler d1 migrations apply manila-shares --remote
+npx wrangler deploy
+```
+
+That's it — no new app config. Sharing reuses the same Worker URL and
+`APP_SHARED_SECRET` you already set for receipt extraction
+(`EXPO_PUBLIC_EXTRACT_URL` + `EXPO_PUBLIC_APP_TOKEN`).
+
+### Verifying
+
+```bash
+curl -X POST https://manila-extract.<your-subdomain>.workers.dev/shares/pull \
+  -H 'x-app-token: <APP_SHARED_SECRET>' -H 'Content-Type: application/json' -d '{}'
+# expected: 401 "Sign in with Google ..." (no Google token supplied)
+```
+
+If the database binding is missing, `/shares/*` returns `503` and receipt
+extraction keeps working — the two features are independent.
+
 ## Updating
 
 After making changes:
 ```bash
 cd workers/extract
 npx wrangler deploy
+```
+
+If you changed the shared-projects schema, apply migrations first:
+```bash
+npx wrangler d1 migrations apply manila-shares --remote
 ```
 
 Rotating secrets:
