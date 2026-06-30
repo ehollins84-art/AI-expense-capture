@@ -9,6 +9,9 @@
 
 export interface ShareEnv {
   DB: D1Database;
+  // R2 bucket holding shared receipt photos. Optional: if unbound, photo
+  // upload/download return 503 and metadata sharing still works.
+  BUCKET?: R2Bucket;
 }
 
 // --- Shapes returned to the client (mirror lib/share.ts) ----------------------
@@ -21,6 +24,7 @@ type SharedExpense = {
   amount: number;
   currency: string;
   notes?: string;
+  imageFilename?: string;
   addedByEmail: string;
   createdAt: string;
   updatedAt: string;
@@ -125,6 +129,7 @@ async function loadShare(
       amount: number;
       currency: string;
       notes: string | null;
+      image_filename: string | null;
       added_by_email: string;
       created_at: string;
       updated_at: string;
@@ -154,6 +159,7 @@ async function loadShare(
       amount: r.amount,
       currency: r.currency,
       notes: r.notes ?? undefined,
+      imageFilename: r.image_filename ?? undefined,
       addedByEmail: r.added_by_email,
       createdAt: r.created_at,
       updatedAt: r.updated_at,
@@ -282,9 +288,17 @@ async function handlePush(
   const deleted = e.deleted === true;
 
   const existing = await db
-    .prepare('SELECT added_by_email FROM share_expenses WHERE id = ?')
+    .prepare('SELECT added_by_email, image_filename FROM share_expenses WHERE id = ?')
     .bind(id)
-    .first<{ added_by_email: string }>();
+    .first<{ added_by_email: string; image_filename: string | null }>();
+
+  // The image bytes are uploaded separately (image-put); here we just persist
+  // the filename so pulls know a photo exists. Keep the prior value if the
+  // client doesn't pass one on an edit.
+  const imageFilename =
+    typeof e.imageFilename === 'string'
+      ? e.imageFilename
+      : existing?.image_filename ?? null;
 
   if (existing) {
     // Author-only edits/deletes: you can change your own expenses, not others'.
@@ -299,7 +313,7 @@ async function handlePush(
     } else {
       await db
         .prepare(
-          'UPDATE share_expenses SET title = ?, date = ?, category = ?, amount = ?, currency = ?, notes = ?, updated_at = ? WHERE id = ?',
+          'UPDATE share_expenses SET title = ?, date = ?, category = ?, amount = ?, currency = ?, notes = ?, image_filename = ?, updated_at = ? WHERE id = ?',
         )
         .bind(
           String(e.title ?? ''),
@@ -308,6 +322,7 @@ async function handlePush(
           Number(e.amount ?? 0),
           String(e.currency ?? 'USD'),
           e.notes ? String(e.notes) : null,
+          imageFilename,
           now,
           id,
         )
@@ -317,7 +332,7 @@ async function handlePush(
     if (deleted) return json({ expense: null });
     await db
       .prepare(
-        'INSERT INTO share_expenses (id, share_id, title, date, category, amount, currency, notes, added_by_email, created_at, updated_at, deleted) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)',
+        'INSERT INTO share_expenses (id, share_id, title, date, category, amount, currency, notes, image_filename, added_by_email, created_at, updated_at, deleted) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)',
       )
       .bind(
         id,
@@ -328,6 +343,7 @@ async function handlePush(
         Number(e.amount ?? 0),
         String(e.currency ?? 'USD'),
         e.notes ? String(e.notes) : null,
+        imageFilename,
         email,
         typeof e.createdAt === 'string' ? e.createdAt : now,
         now,
@@ -349,12 +365,81 @@ async function handlePush(
         amount: row.amount,
         currency: row.currency,
         notes: row.notes ?? undefined,
+        imageFilename: row.image_filename ?? undefined,
         addedByEmail: row.added_by_email,
         createdAt: row.created_at,
         updatedAt: row.updated_at,
       }
     : null;
   return json({ expense, deleted });
+}
+
+// --- Receipt photos (R2) ------------------------------------------------------
+//
+// Photos are stored as base64 text objects keyed by `${shareId}/${expenseId}`.
+// Storing base64 (rather than raw bytes) keeps the worker trivial — no binary
+// encode/decode — at the cost of ~33% more storage, which is immaterial on the
+// R2 free tier for personal use.
+
+function imageKey(shareId: string, expenseId: string): string {
+  return `${shareId}/${expenseId}`;
+}
+
+async function handleImagePut(
+  env: ShareEnv,
+  email: string,
+  body: any,
+): Promise<Response> {
+  if (!env.BUCKET) return fail('Photo storage is not set up on this server.', 503);
+  const shareId = typeof body?.shareId === 'string' ? body.shareId : '';
+  const expenseId = typeof body?.expenseId === 'string' ? body.expenseId : '';
+  const dataBase64 = typeof body?.dataBase64 === 'string' ? body.dataBase64 : '';
+  const mediaType =
+    typeof body?.mediaType === 'string' ? body.mediaType : 'image/jpeg';
+  const filename =
+    typeof body?.filename === 'string' && body.filename ? body.filename : 'receipt.jpg';
+  if (!shareId || !expenseId || !dataBase64) {
+    return fail('Missing shareId, expenseId or image data.', 400);
+  }
+  if (dataBase64.length > 15 * 1024 * 1024) {
+    return fail('Image too large.', 413);
+  }
+  if (!(await isMember(env.DB, shareId, email))) {
+    return fail('You\'re not a member of that shared project.', 403);
+  }
+
+  await env.BUCKET.put(imageKey(shareId, expenseId), dataBase64, {
+    httpMetadata: { contentType: 'text/plain' },
+    customMetadata: { mediaType, filename },
+  });
+  // Mirror the filename onto the expense row so pulls advertise the photo.
+  await env.DB.prepare(
+    'UPDATE share_expenses SET image_filename = ? WHERE id = ? AND share_id = ?',
+  )
+    .bind(filename, expenseId, shareId)
+    .run();
+
+  return json({ ok: true, imageFilename: filename });
+}
+
+async function handleImageGet(
+  env: ShareEnv,
+  email: string,
+  body: any,
+): Promise<Response> {
+  if (!env.BUCKET) return fail('Photo storage is not set up on this server.', 503);
+  const shareId = typeof body?.shareId === 'string' ? body.shareId : '';
+  const expenseId = typeof body?.expenseId === 'string' ? body.expenseId : '';
+  if (!shareId || !expenseId) return fail('Missing shareId or expenseId.', 400);
+  if (!(await isMember(env.DB, shareId, email))) {
+    return fail('You\'re not a member of that shared project.', 403);
+  }
+
+  const obj = await env.BUCKET.get(imageKey(shareId, expenseId));
+  if (!obj) return json({ dataBase64: null });
+  const dataBase64 = await obj.text();
+  const mediaType = obj.customMetadata?.mediaType ?? 'image/jpeg';
+  return json({ dataBase64, mediaType });
 }
 
 async function handleLeave(
@@ -421,6 +506,10 @@ export async function handleShareRequest(
       return handlePush(env.DB, email, body);
     case 'leave':
       return handleLeave(env.DB, email, body);
+    case 'image-put':
+      return handleImagePut(env, email, body);
+    case 'image-get':
+      return handleImageGet(env, email, body);
     default:
       return fail('Not found', 404);
   }

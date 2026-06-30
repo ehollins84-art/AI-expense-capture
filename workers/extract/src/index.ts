@@ -15,6 +15,8 @@ export interface Env {
   // D1 database backing shared projects. Optional: if it isn't bound the
   // /shares/* routes return 503 and receipt extraction still works.
   DB: D1Database;
+  // R2 bucket holding shared receipt photos. Optional in the same way.
+  BUCKET?: R2Bucket;
 }
 
 type ExtractRequest = {

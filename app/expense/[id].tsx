@@ -18,6 +18,7 @@ import { useStore, useActiveProject } from '../../lib/store';
 import { theme } from '../../lib/theme';
 import { formatDate, formatMoney, moneyTextStyle } from '../../lib/format';
 import { imagePathForExpense } from '../../lib/storage';
+import { ensureSharedImage } from '../../lib/share';
 import { categoriesForProject } from '../../lib/categories';
 import { haptic } from '../../lib/haptics';
 import { DatePickerModal } from '../../components/DatePickerModal';
@@ -75,9 +76,12 @@ export default function ExpenseDetail() {
   useEffect(() => {
     if (!expense) return;
     if (expense.imageFilename) {
-      imagePathForExpense(iteration, expense).then((p) =>
-        setImageUri(p ? `${p}?t=${Date.now()}` : null),
-      );
+      // Shared receipts live in the cloud store; download/cache on demand.
+      // Personal receipts resolve to a local filesystem path.
+      const resolver = expense.shareId
+        ? ensureSharedImage(expense.shareId, expense.id, expense.imageFilename)
+        : imagePathForExpense(iteration, expense);
+      resolver.then((p) => setImageUri(p ? `${p}?t=${Date.now()}` : null));
     } else {
       setImageUri(null);
     }
@@ -150,8 +154,12 @@ export default function ExpenseDetail() {
 
     try {
       const stored = await updateExpense(next);
-      const p = await imagePathForExpense(iteration, stored);
-      setImageUri(p ? `${p}?t=${Date.now()}` : null);
+      // Personal receipts move folders when title/date change, so re-resolve.
+      // Shared receipts keep a stable cloud key — leave the shown image as-is.
+      if (!stored.shareId) {
+        const p = await imagePathForExpense(iteration, stored);
+        setImageUri(p ? `${p}?t=${Date.now()}` : null);
+      }
       haptic.light();
       flash(field);
     } catch (e) {
@@ -236,9 +244,15 @@ export default function ExpenseDetail() {
             allowsEditing: false,
           });
       if (result.canceled) return;
-      const stored = await attachImage(expense, result.assets[0].uri);
-      const p = await imagePathForExpense(iteration, stored);
-      setImageUri(p ? `${p}?t=${Date.now()}` : null);
+      const picked = result.assets[0].uri;
+      const stored = await attachImage(expense, picked);
+      if (stored.shareId) {
+        // Already uploaded + cached by the store; show the picked file now.
+        setImageUri(`${picked}?t=${Date.now()}`);
+      } else {
+        const p = await imagePathForExpense(iteration, stored);
+        setImageUri(p ? `${p}?t=${Date.now()}` : null);
+      }
       haptic.success();
     } catch (e) {
       haptic.error();
@@ -651,8 +665,10 @@ export default function ExpenseDetail() {
           const next: Expense = { ...expense, date: iso };
           updateExpense(next)
             .then(async (stored) => {
-              const p = await imagePathForExpense(iteration, stored);
-              setImageUri(p ? `${p}?t=${Date.now()}` : null);
+              if (!stored.shareId) {
+                const p = await imagePathForExpense(iteration, stored);
+                setImageUri(p ? `${p}?t=${Date.now()}` : null);
+              }
               haptic.light();
               flash('date');
             })

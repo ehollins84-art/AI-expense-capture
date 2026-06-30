@@ -5,18 +5,21 @@
 // backup), keyed by share id. Identity is the user's Google account — we send
 // their Google access token with every call and the server verifies it.
 //
-// Shared expenses are metadata-only (title, date, category, amount): receipt
-// *photos* stay on whoever captured them and are not uploaded. That keeps the
-// shared ledger small and cheap while still giving both people every line item
-// and the running total.
+// Expense details (title, date, category, amount) sync through D1; receipt
+// photos sync through R2 (uploaded on capture, downloaded + cached on demand by
+// the other person's phone), so everyone sees the same receipts and total.
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as FileSystem from 'expo-file-system/legacy';
 import { getValidToken, getStoredEmail } from './drive';
+import { ensureDir } from './storage';
 import type { Expense, Project } from './types';
 
 const BASE = (process.env.EXPO_PUBLIC_EXTRACT_URL ?? '').trim().replace(/\/$/, '');
 const APP_TOKEN = (process.env.EXPO_PUBLIC_APP_TOKEN ?? '').trim();
 const CACHE_KEY = 'share.cache.v1';
+// Downloaded shared receipt photos are cached here so they only download once.
+const SHARED_IMG_DIR = FileSystem.documentDirectory + 'manila-shared/';
 
 // --- Wire shapes (mirror the server) ------------------------------------------
 
@@ -28,6 +31,7 @@ export type SharedExpense = {
   amount: number;
   currency: string;
   notes?: string;
+  imageFilename?: string;
   addedByEmail: string;
   createdAt: string;
   updatedAt: string;
@@ -124,6 +128,7 @@ export async function pushExpense(
     amount: number;
     currency: string;
     notes?: string;
+    imageFilename?: string;
     createdAt?: string;
     deleted?: boolean;
   },
@@ -137,6 +142,95 @@ export async function pushExpense(
 
 export async function leaveShare(shareId: string): Promise<void> {
   await api<{ ok: boolean }>('leave', { shareId });
+}
+
+// --- Receipt photos -----------------------------------------------------------
+
+const IMG_EXTS = ['jpg', 'jpeg', 'png', 'heic', 'webp'];
+
+export function shareImageFilename(uri: string): string {
+  const ext = uri.split('.').pop()?.toLowerCase() ?? 'jpg';
+  return `receipt.${IMG_EXTS.includes(ext) ? ext : 'jpg'}`;
+}
+
+function mediaTypeForUri(uri: string): string {
+  const ext = uri.split('.').pop()?.toLowerCase();
+  switch (ext) {
+    case 'png':
+      return 'image/png';
+    case 'webp':
+      return 'image/webp';
+    case 'heic':
+    case 'heif':
+      return 'image/heic';
+    default:
+      return 'image/jpeg';
+  }
+}
+
+function sharedImageCachePath(
+  shareId: string,
+  expenseId: string,
+  filename: string,
+): string {
+  const ext = filename.split('.').pop()?.toLowerCase() ?? 'jpg';
+  return `${SHARED_IMG_DIR}${shareId}/${expenseId}.${ext}`;
+}
+
+// Upload a receipt photo for a shared expense to the backend (R2), then copy it
+// into the local cache so this device shows it instantly without re-downloading.
+export async function putShareImage(
+  shareId: string,
+  expenseId: string,
+  localUri: string,
+  filename: string,
+): Promise<void> {
+  const dataBase64 = await FileSystem.readAsStringAsync(localUri, {
+    encoding: FileSystem.EncodingType.Base64,
+  });
+  await api('image-put', {
+    shareId,
+    expenseId,
+    filename,
+    mediaType: mediaTypeForUri(localUri),
+    dataBase64,
+  });
+  const dest = sharedImageCachePath(shareId, expenseId, filename);
+  try {
+    await ensureDir(`${SHARED_IMG_DIR}${shareId}/`);
+    await FileSystem.copyAsync({ from: localUri, to: dest });
+  } catch {
+    // Cache copy is best-effort; the image can always be re-downloaded.
+  }
+}
+
+// Resolve a local file path for a shared expense's photo, downloading it from
+// the backend on first access and caching it. Returns null if there's no photo.
+export async function ensureSharedImage(
+  shareId: string,
+  expenseId: string,
+  filename: string | undefined,
+): Promise<string | null> {
+  if (!filename) return null;
+  const dest = sharedImageCachePath(shareId, expenseId, filename);
+  const info = await FileSystem.getInfoAsync(dest);
+  if (info.exists) return dest;
+  if (!shareConfigured()) return null;
+  try {
+    const { dataBase64 } = await api<{
+      dataBase64: string | null;
+      mediaType?: string;
+    }>('image-get', { shareId, expenseId });
+    if (!dataBase64) return null;
+    await ensureDir(`${SHARED_IMG_DIR}${shareId}/`);
+    await FileSystem.writeAsStringAsync(dest, dataBase64, {
+      encoding: FileSystem.EncodingType.Base64,
+    });
+    return dest;
+  } catch (e) {
+    console.warn('Shared image download failed:', e);
+    return null;
+  }
 }
 
 // --- Local cache (so shared projects render offline / before first pull) ------
@@ -189,6 +283,7 @@ export function sharedToExpenses(sp: SharedProject): Expense[] {
     amount: e.amount,
     currency: e.currency,
     notes: e.notes,
+    imageFilename: e.imageFilename,
     createdAt: e.createdAt,
     shareId: sp.id,
     addedByEmail: e.addedByEmail,

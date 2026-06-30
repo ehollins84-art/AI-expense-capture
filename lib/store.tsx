@@ -50,6 +50,8 @@ import {
   inviteMember,
   leaveShare,
   pushExpense,
+  putShareImage,
+  shareImageFilename,
   readShareCache,
   writeShareCache,
   sharedToProject,
@@ -388,6 +390,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       // receipt photo stays on this phone and is not uploaded).
       const shared = findShared(input.projectId);
       if (shared) {
+        const imageFilename = imageUri ? shareImageFilename(imageUri) : undefined;
         const saved = await pushExpense(shared.id, {
           title: input.title,
           date: input.date,
@@ -395,7 +398,17 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           amount: input.amount,
           currency: input.currency,
           notes: input.notes,
+          imageFilename,
         });
+        // Upload the receipt photo to the shared store (best-effort — the
+        // expense is already saved even if the image upload hiccups).
+        if (saved && imageUri && imageFilename) {
+          try {
+            await putShareImage(shared.id, saved.id, imageUri, imageFilename);
+          } catch (err) {
+            console.warn('Shared image upload failed:', err);
+          }
+        }
         if (saved) applySharedExpense(shared.id, saved);
         return {
           id: saved?.id ?? newId(),
@@ -406,6 +419,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           amount: input.amount,
           currency: input.currency,
           notes: input.notes,
+          imageFilename: saved?.imageFilename ?? imageFilename,
           createdAt: saved?.createdAt ?? new Date().toISOString(),
           shareId: shared.id,
           addedByEmail: saved?.addedByEmail,
@@ -540,7 +554,13 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const attachImage = useCallback(
     async (expense: Expense, imageUri: string): Promise<Expense> => {
       if (expense.shareId) {
-        throw new Error('Receipt photos aren\'t part of shared projects yet.');
+        // Upload the new photo to the shared store and update the cached record.
+        const imageFilename = shareImageFilename(imageUri);
+        await putShareImage(expense.shareId, expense.id, imageUri, imageFilename);
+        const sp = sharedProjects.find((s) => s.id === expense.shareId);
+        const cur = sp?.expenses.find((e) => e.id === expense.id);
+        if (cur) applySharedExpense(expense.shareId, { ...cur, imageFilename });
+        return { ...expense, imageFilename };
       }
       const stored = await attachImageToExpenseFs(iteration, expense, imageUri);
       setLocalExpenses((prev) =>
@@ -554,7 +574,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       }
       return stored;
     },
-    [iteration, localProjects],
+    [iteration, localProjects, sharedProjects, applySharedExpense],
   );
 
   const importFromDrive = useCallback(
@@ -615,8 +635,20 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
             amount: e.amount,
             currency: e.currency,
             notes: e.notes,
+            imageFilename: e.imageFilename,
             createdAt: e.createdAt,
           });
+          // Carry the receipt photo up to the shared store too.
+          if (e.imageFilename) {
+            const localPath = await imagePathForExpense(iteration, e);
+            if (localPath) {
+              try {
+                await putShareImage(created.id, e.id, localPath, e.imageFilename);
+              } catch (err) {
+                console.warn('Shared image migration failed:', err);
+              }
+            }
+          }
         }
         await inviteMember(created.id, inviteeEmail);
       } catch (e) {

@@ -105,7 +105,7 @@ export default function EditProject() {
         haptic.success();
         Alert.alert(
           'Project shared',
-          `${trimmed} can now add expenses to "${project.name}" and you'll both see the combined total. They'll see it once they sign in with this email.`,
+          `${trimmed} can now add expenses to "${project.name}" and you'll both see the same receipts and combined total. They'll see it once they sign in with this email.`,
         );
       } else if (mode === 'invite') {
         await inviteToProject(project, trimmed);
@@ -226,8 +226,8 @@ export default function EditProject() {
             ))}
           </View>
           <Text style={styles.helperText}>
-            Receipt photos stay on each person's phone — shared projects track
-            the amounts and totals, not the images.
+            Everyone in this project sees the same expenses, receipt photos, and
+            running total.
           </Text>
 
           <View style={styles.divider} />
@@ -373,9 +373,9 @@ export default function EditProject() {
     }
     Alert.alert(
       'Share this project',
-      `You'll add someone by email. They'll be able to add expenses and see the combined total. Receipt photos stay private to each phone.${
+      `You'll add someone by email. They'll be able to add expenses and see everything — receipts, photos, and the combined total.${
         expenseCount > 0
-          ? `\n\nYour ${expenseCount} existing receipt${expenseCount === 1 ? '' : 's'} will move into the shared project (without their photos).`
+          ? `\n\nYour ${expenseCount} existing receipt${expenseCount === 1 ? '' : 's'} (and their photos) will move into the shared project.`
           : ''
       }`,
       [
@@ -571,8 +571,8 @@ export default function EditProject() {
           <View style={styles.schemeCard}>
             <Text style={styles.schemeHint}>
               Share this project with someone by email. You'll both be able to
-              add expenses and see the combined total. Receipt photos stay
-              private to each phone.
+              add expenses and see the same receipts, photos, and combined
+              total.
             </Text>
             <Pressable
               style={[styles.btn, styles.btnGhost, { marginTop: theme.spacing.md }]}

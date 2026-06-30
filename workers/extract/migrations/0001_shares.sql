@@ -33,6 +33,7 @@ CREATE TABLE IF NOT EXISTS share_expenses (
   amount         REAL NOT NULL,
   currency       TEXT NOT NULL,
   notes          TEXT,
+  image_filename TEXT,                  -- set when a receipt photo is in R2
   added_by_email TEXT NOT NULL,         -- lower-cased; the author
   created_at     TEXT NOT NULL,
   updated_at     TEXT NOT NULL,

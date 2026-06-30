@@ -74,8 +74,9 @@ curl -X POST https://manila-extract.<your-subdomain>.workers.dev/extract \
 
 The same Worker also backs **shared projects** — projects two people can both
 add expenses to and see a combined total. This needs a Cloudflare D1 database
-(SQLite, on the free tier). Receipt *photos* are never uploaded here; only the
-expense details (title, date, category, amount) sync, keyed by share.
+(SQLite, for the expense details) and an R2 bucket (for the receipt photos),
+both on the free tier. Everyone in a shared project sees the same receipts,
+photos, and running total.
 
 Identity is each user's Google account: the app sends the signed-in user's
 Google token with every request and the Worker verifies it against Google's
@@ -87,11 +88,12 @@ connect Google in the app's Settings to use sharing — same sign-in as Drive.)
 ```bash
 cd workers/extract
 npx wrangler d1 create manila-shares
+npx wrangler r2 bucket create manila-receipts
 ```
 
-Wrangler prints a `database_id`. Paste it into `wrangler.toml` under
-`[[d1_databases]]` (replacing `REPLACE_WITH_D1_DATABASE_ID`). Then create the
-tables and deploy:
+`d1 create` prints a `database_id`. Paste it into `wrangler.toml` under
+`[[d1_databases]]` (replacing `REPLACE_WITH_D1_DATABASE_ID`). The R2 bucket
+binding is already wired in `wrangler.toml`. Then create the tables and deploy:
 
 ```bash
 npx wrangler d1 migrations apply manila-shares --remote
