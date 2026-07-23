@@ -412,7 +412,13 @@ async function downloadFileToPath(
 
 function expenseFolderName(expense: Expense): string {
   const dateStr = expense.date.replaceAll('-', '.');
-  const safeTitle = expense.title.replace(/[/\\:*?"<>|]/g, '').trim();
+  // Must produce byte-identical names to storage.ts's expenseFolderName so a
+  // given expense maps to the same folder locally and on Drive. See that
+  // function for why '#' and '%' are stripped.
+  const safeTitle = expense.title
+    .replace(/[/\\:*?"<>|#%]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
   return `${dateStr} ${safeTitle}`;
 }
 

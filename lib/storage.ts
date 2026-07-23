@@ -37,7 +37,17 @@ function yearDir(letter: string, projectId: string, year: number) {
 
 function expenseFolderName(expense: Expense): string {
   const dateStr = expense.date.replaceAll('-', '.');
-  const safeTitle = expense.title.replace(/[/\\:*?"<>|]/g, '').trim();
+  // Strip characters that are illegal in filesystem paths (/\:*?"<>|) as well
+  // as ones that break URI parsing. expo-file-system treats every path as a
+  // file:// URI, so a '#' in the title is read as the start of a URI fragment
+  // (truncating the path, e.g. "Order #111" -> "Order ") and '%' is read as a
+  // percent-escape. Both must be removed or the copy/create targets the wrong
+  // path. Remaining whitespace is collapsed so a stripped char can't leave a
+  // dangling space.
+  const safeTitle = expense.title
+    .replace(/[/\\:*?"<>|#%]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
   return `${dateStr} ${safeTitle}`;
 }
 
