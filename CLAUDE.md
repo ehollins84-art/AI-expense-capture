@@ -56,38 +56,45 @@ If you need an API key, a login credential, a config value, or access to an exte
 
 ## What I Care About
 
-- **Seeing my changes live.** After every task, make sure the app is running and I can see the result in my browser.
+- **Seeing my changes live.** I test on the **Manila app installed on my phone** (a real TestFlight / Play build), not in a browser and not in Expo Go. After a change you want me to test, get it onto my phone (ship an over-the-air update — see "How I Test Now") and tell me plainly how to see it.
 - **Things not breaking.** If you change something, make sure existing features still work.
 - **Clear communication.** I would rather you over-explain in simple terms than assume I understood something technical.
 
-## After You Push Code
+## How I Test Now (the app is on my phone — no more Expo / Codespace)
 
-I run the app from a GitHub Codespace, so every code change you push means I need to pull it down before I can test on my phone. **Always end your reply with the exact terminal lines I'll need next**, as copy-pasteable code blocks. Don't make me ask — and don't make me hunt for the Expo start command in a different message. Include both the pull line AND the Expo start line every time, even if Expo is probably still running. I can ignore the second one if I don't need it.
+I have the **Manila app installed on my phone** as a real build. I do **not**
+run Expo Go, I do **not** open a Codespace, and I do **not** pull code or run
+terminal commands to test anymore. That whole workflow is retired — never end a
+reply with `git pull` / `npx expo start` lines again, and never tell me to scan
+a QR code.
 
-Defaults to use:
+The way a change reaches my phone now is an **over-the-air (OTA) update**: you
+publish it, and I reopen the app to get it. So after a change I want to test,
+**you** get it onto my phone — I don't do anything on a computer. Here's what
+that means for each kind of change:
 
-- **Pure code changes (no new packages):**
-  ```
-  git checkout package-lock.json && git pull
-  ```
-  ```
-  npx expo start --tunnel --clear
-  ```
-  (Use the second one only if Expo isn't already running; otherwise just reload from the QR code or terminal.)
+- **JavaScript / UI / logic / copy / bug-fix change (almost everything):** ship
+  it as an OTA update by pushing to the release branch that publishes it (see
+  "Shipping to users" below and `RELEASING.md`). Then tell me, in one plain
+  line, exactly how to see it — normally: **"Force-close Manila and reopen it
+  twice — the first open downloads the update, the second shows it."** (Store
+  builds apply an OTA on the *second* reopen, so always say "twice.")
 
-- **You added or upgraded a package:**
-  ```
-  git checkout package-lock.json && git pull && npm ci
-  ```
-  ```
-  npx expo start --tunnel --clear
-  ```
-  (`npm ci` is intentional — it installs strictly from the lockfile so we stop hitting "your local lock would be overwritten" merge conflicts. After a package change, prefer a fresh `npx expo start` rather than a hot reload — the second command is the one you want.)
+- **Native change** (new native module, new permission, Expo SDK bump, or an
+  `app.json` version bump): an OTA can't carry this — it needs a fresh build
+  submitted to TestFlight / Play. Kick off the build (see below), then tell me
+  in plain English that this one isn't instant: I'll get it as a new app version
+  through TestFlight / the Play Store in roughly 20–30 minutes plus store
+  processing, and I install it like a normal app update.
 
-- **Doc-only change (CLAUDE.md, AGENTS.md, README, comments):**
-  Skip the commands. Say "no need to pull, this is doc-only" so I know.
+- **Doc-only change (CLAUDE.md, AGENTS.md, README, comments):** nothing reaches
+  my phone and nothing needs to. Just say "this is doc-only, nothing to test."
 
-If a change requires me to do something special before testing (clear cache differently, sign out and back in, force-close Expo Go, etc.), say so in one plain-English line above the commands.
+Whatever the change, **end your reply by telling me plainly what to do to see
+it** (reopen the app, wait for a TestFlight build, or nothing) — don't make me
+ask, and don't make me hunt for it. If a change needs something special before
+it'll show (sign out and back in, clear something, etc.), say so in one plain
+line first.
 
 ## Shipping to users (engineering note — this part isn't for me, it's for you)
 
